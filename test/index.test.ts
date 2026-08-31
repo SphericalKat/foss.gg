@@ -19,6 +19,17 @@ beforeEach(async () => {
   await env.DB.exec("DELETE FROM links");
 });
 
+test("serves the landing page at the apex root", async () => {
+  const response = await request("/");
+  const body = await response.text();
+
+  expect(response.status).toBe(200);
+  expect(response.headers.get("content-type")).toContain("text/html");
+  expect(body).toContain("URLs,");
+  expect(body).toContain('href="/admin"');
+  expect((await request("/", { method: "HEAD" })).status).toBe(200);
+});
+
 test("redirects path and subdomain links without forwarding source data", async () => {
   const login = await form("/admin/login", { password });
   const cookie = login.headers.get("set-cookie")?.split(";")[0];
@@ -41,6 +52,7 @@ test("requires a session and supports create, edit, delete, and validation", asy
   const login = await form("/admin/login", { password });
   const cookie = login.headers.get("set-cookie")?.split(";")[0];
   expect((await form("/admin/links", { kind: "path", key: "one", destination: "javascript:alert(1)" }, cookie!)).status).toBe(400);
+  expect((await form("/admin/links", { kind: "path", key: "/", destination: "https://example.com" }, cookie!)).status).toBe(400);
   expect((await form("/admin/links", { kind: "path", key: "/admin/x", destination: "https://example.com" }, cookie!)).status).toBe(400);
   expect((await form("/admin/links", { kind: "path", key: "one", destination: "https://example.com" }, cookie!)).status).toBe(303);
   const duplicate = await form("/admin/links", { kind: "path", key: "/one", destination: "https://other.example" }, cookie!);
