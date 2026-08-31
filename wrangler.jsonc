@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "foss-gg-shortener",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-28",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "routes": [
+    { "pattern": "foss.gg/*", "zone_name": "foss.gg" },
+    { "pattern": "*.foss.gg/*", "zone_name": "foss.gg" }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "foss-gg-links",
+      "database_id": "84a91ce4-e71d-4e6c-844e-47ea229736f7",
+      "migrations_dir": "migrations"
+    }
+  ]
+}
