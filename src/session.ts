@@ -1,8 +1,8 @@
 import type { MiddlewareHandler } from "hono";
+import { scrypt } from "node:crypto";
 
 const SESSION_COOKIE = "foss_admin_session";
 const SESSION_TTL_SECONDS = 12 * 60 * 60;
-const PASSWORD_ITERATIONS = 600_000;
 const encoder = new TextEncoder();
 
 type User = {
@@ -115,13 +115,10 @@ async function hashPassword(
   password: string,
   salt: Uint8Array<ArrayBufferLike> = crypto.getRandomValues(new Uint8Array(16)),
 ): Promise<{ hash: string; salt: string }> {
-  const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
-  const hash = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", salt, iterations: PASSWORD_ITERATIONS, hash: "SHA-256" },
-    key,
-    256,
-  );
-  return { hash: toBase64Url(new Uint8Array(hash)), salt: toBase64Url(salt) };
+  const hash = await new Promise<Uint8Array>((resolve, reject) => {
+    scrypt(password, salt, 32, (error, derivedKey) => (error ? reject(error) : resolve(derivedKey)));
+  });
+  return { hash: toBase64Url(hash), salt: toBase64Url(salt) };
 }
 
 async function verifyPassword(password: string, salt: string, expectedHash: string): Promise<boolean> {
