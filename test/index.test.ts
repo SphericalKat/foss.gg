@@ -16,7 +16,9 @@ async function form(path: string, values: Record<string, string>, cookie?: strin
 }
 
 beforeEach(async () => {
+  await env.DB.exec("DELETE FROM audit_log");
   await env.DB.exec("DELETE FROM links");
+  await env.DB.exec("DELETE FROM users");
 });
 
 test("serves the landing page at the apex root", async () => {
@@ -31,7 +33,7 @@ test("serves the landing page at the apex root", async () => {
 });
 
 test("redirects path and subdomain links without forwarding source data", async () => {
-  const login = await form("/admin/login", { password });
+  const login = await form("/admin/login", { username: "admin", password });
   const cookie = login.headers.get("set-cookie")?.split(";")[0];
   expect(cookie).toBeTruthy();
   expect((await form("/admin/links", { kind: "path", key: "go", destination: "https://example.com/a?b=c#d" }, cookie!)).status).toBe(303);
@@ -45,11 +47,11 @@ test("redirects path and subdomain links without forwarding source data", async 
 
 test("requires a session and supports create, edit, delete, and validation", async () => {
   expect((await request("/admin")).status).toBe(200);
-  expect(await (await request("/admin")).text()).toContain("Password");
-  expect((await form("/admin/login", { password: "wrong" })).status).toBe(401);
+  expect(await (await request("/admin")).text()).toContain("Username");
+  expect((await form("/admin/login", { username: "admin", password: "wrong" })).status).toBe(401);
   expect((await request("/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })).status).toBe(400);
 
-  const login = await form("/admin/login", { password });
+  const login = await form("/admin/login", { username: "admin", password });
   const cookie = login.headers.get("set-cookie")?.split(";")[0];
   expect((await form("/admin/links", { kind: "path", key: "one", destination: "javascript:alert(1)" }, cookie!)).status).toBe(400);
   expect((await form("/admin/links", { kind: "path", key: "/", destination: "https://example.com" }, cookie!)).status).toBe(400);
@@ -66,6 +68,36 @@ test("requires a session and supports create, edit, delete, and validation", asy
   expect((await request("/anything", {}, "edited.foss.gg")).headers.get("location")).toBe("https://edited.example");
   expect((await form(`/admin/links/${row!.id}/delete`, {}, cookie!)).status).toBe(303);
   expect((await request("/anything", {}, "edited.foss.gg")).status).toBe(404);
+  const activity = await env.DB.prepare("SELECT action FROM audit_log ORDER BY id").all<{ action: string }>();
+  expect(activity.results.map(({ action }) => action)).toEqual(["created", "updated", "deleted"]);
+});
+
+test("lets admin add users and enforces link ownership with visible activity", async () => {
+  const adminLogin = await form("/admin/login", { username: "admin", password });
+  const adminCookie = adminLogin.headers.get("set-cookie")?.split(";")[0];
+  expect(adminCookie).toBeTruthy();
+
+  expect((await form("/admin/users", { username: "alice", password: "correct horse battery staple" }, adminCookie!)).status).toBe(303);
+  const userLogin = await form("/admin/login", { username: "alice", password: "correct horse battery staple" });
+  const userCookie = userLogin.headers.get("set-cookie")?.split(";")[0];
+  expect(userCookie).toBeTruthy();
+
+  expect((await form("/admin/links", { kind: "path", key: "admin-link", destination: "https://admin.example" }, adminCookie!)).status).toBe(303);
+  const adminLink = await env.DB.prepare("SELECT id FROM links WHERE key = '/admin-link'").first<{ id: number }>();
+  expect((await form(`/admin/links/${adminLink!.id}`, { kind: "path", key: "stolen", destination: "https://alice.example" }, userCookie!)).status).toBe(404);
+  expect((await form(`/admin/links/${adminLink!.id}/delete`, {}, userCookie!)).status).toBe(404);
+
+  expect((await form("/admin/links", { kind: "path", key: "alice-link", destination: "https://alice.example" }, userCookie!)).status).toBe(303);
+  const aliceLink = await env.DB.prepare("SELECT id FROM links WHERE key = '/alice-link'").first<{ id: number }>();
+  expect((await form(`/admin/links/${aliceLink!.id}`, { kind: "path", key: "admin-takeover", destination: "https://admin.example" }, adminCookie!)).status).toBe(404);
+
+  const userPage = await request("/admin", { headers: { Cookie: userCookie! } });
+  const body = await userPage.text();
+  expect(body).toContain("Logged in as alice");
+  expect(body).toContain("Set by admin");
+  expect(body).toContain("alice</strong> created");
+  expect(body).not.toContain('action="/admin/users"');
+  expect((await form("/admin/users", { username: "mallory", password: "correct horse battery staple" }, userCookie!)).status).toBe(404);
 });
 
 test("returns not found for unsupported host forms and missing links", async () => {

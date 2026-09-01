@@ -7,7 +7,9 @@ It supports two link formats:
 - `foss.gg/example`
 - `example.foss.gg`
 
-Manage links at [foss.gg/admin](https://foss.gg/admin).
+Manage links at [foss.gg/admin](https://foss.gg/admin). Log in as `admin` with the configured admin password.
+
+The admin can add users and set their passwords. Each account can edit or delete only its own links. The admin page shows the latest link activity.
 
 ## Development
 
