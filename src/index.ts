@@ -374,6 +374,7 @@ async function listPage(env: AppEnv, session: Session, error?: string, status = 
         "SELECT id, kind, key, destination, owner_username, created_at, updated_at FROM links ORDER BY kind, key",
       ).all<Link>(),
       env.DB.prepare(
+        // ponytail: Show recent activity only; add pagination when 100 entries are not enough.
         "SELECT id, actor_username, action, kind, key, destination, created_at FROM audit_log ORDER BY id DESC LIMIT 100",
       ).all<AuditEntry>(),
       session.isAdmin
@@ -498,7 +499,7 @@ function renderAdmin(
   const userSection = session.isAdmin
     ? `<section><h2>Users</h2><form method="post" action="/admin/users"><input name="username" placeholder="username" autocomplete="off" maxlength="32" required><input type="password" name="password" placeholder="password" autocomplete="new-password" minlength="12" maxlength="256" required><button>Add user</button></form><ul>${users.map((user) => `<li><strong>${escapeHtml(user.username)}</strong><small>Added ${escapeHtml(user.created_at)}</small></li>`).join("") || "<li>No users yet</li>"}</ul></section>`
     : "";
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>foss.gg links</title>${styles()}</head><body><main><header><div><h1>foss.gg links</h1><small>Logged in as ${escapeHtml(session.username)}</small></div><form method="post" action="/admin/logout"><button>Log out</button></form></header>${error ? `<p class="error">${escapeHtml(error)}</p>` : ""}<section><h2>New link</h2><form method="post" action="/admin/links"><select name="kind"><option value="path">Path</option><option value="subdomain">Subdomain</option></select><input name="key" placeholder="/example or example" required><input type="url" name="destination" placeholder="https://example.com" required><button>Add link</button></form></section><section><h2>Saved links</h2><ul>${rows || "<li>No links yet</li>"}</ul></section>${userSection}<section><h2>Activity</h2><ul class="activity">${activity || "<li>No activity yet</li>"}</ul></section></main></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>foss.gg links</title>${styles()}</head><body><main><header><div><h1>foss.gg links</h1><small>Logged in as ${escapeHtml(session.username)}</small></div><form method="post" action="/admin/logout"><button>Log out</button></form></header>${error ? `<p class="error">${escapeHtml(error)}</p>` : ""}<section><h2>New link</h2><form method="post" action="/admin/links"><select name="kind"><option value="path">Path</option><option value="subdomain">Subdomain</option></select><input name="key" placeholder="/example or example" required><input type="url" name="destination" placeholder="https://example.com" required><button>Add link</button></form></section><section><h2>Saved links</h2><ul>${rows || "<li>No links yet</li>"}</ul></section>${userSection}<section><h2>Recent activity</h2><ul class="activity">${activity || "<li>No activity yet</li>"}</ul></section></main></body></html>`;
 }
 
 function escapeHtml(value: string): string {
