@@ -1,5 +1,4 @@
 import { Hono, type Context } from "hono";
-import { adminPage, loginPage, type AuditEntry, type Link, type UserSummary } from "../html";
 import {
   authenticate,
   clearSessionCookie,
@@ -9,6 +8,8 @@ import {
   type AppBindings,
   type Session,
 } from "../session";
+import { AdminPage, type AuditEntry, type Link, type UserSummary } from "../views/admin";
+import { LoginPage } from "../views/login";
 
 type LinkInput = {
   kind: Link["kind"];
@@ -22,22 +23,22 @@ adminRoutes.use("*", loadSession);
 
 adminRoutes.get("/", async (context) => {
   const session = context.get("session");
-  return session ? listPage(context.env, session) : loginPage();
+  return session ? listPage(context, session) : renderLogin(context);
 });
 
 adminRoutes.post("/login", async (context) => {
   const form = await readFormData(context.req.raw);
-  if (!form) return loginPage("Invalid form data", 400);
+  if (!form) return renderLogin(context, "Invalid form data", 400);
   const username = String(form.get("username") ?? "").trim().toLowerCase();
   const password = String(form.get("password") ?? "");
-  if (!isUsername(username) || password.length > 256) return loginPage("Invalid username or password", 401);
+  if (!isUsername(username) || password.length > 256) return renderLogin(context, "Invalid username or password", 401);
 
   const cookie = await authenticate(context.env, username, password);
-  return cookie ? redirectResponse("/admin", cookie) : loginPage("Invalid username or password", 401);
+  return cookie ? redirectResponse("/admin", cookie) : renderLogin(context, "Invalid username or password", 401);
 });
 
 adminRoutes.use("*", async (context, next) => {
-  if (!context.get("session")) return loginPage();
+  if (!context.get("session")) return renderLogin(context);
   await next();
 });
 
@@ -62,7 +63,7 @@ adminRoutes.all("*", () => textResponse("Not found", 404));
 
 async function createLink(context: Context<AppBindings>, session: Session): Promise<Response> {
   const input = await readLinkInput(context.req.raw);
-  if ("error" in input) return listPage(context.env, session, input.error, 400);
+  if ("error" in input) return listPage(context, session, input.error, 400);
 
   const now = new Date().toISOString();
   try {
@@ -76,14 +77,14 @@ async function createLink(context: Context<AppBindings>, session: Session): Prom
     ]);
     return redirectResponse("/admin");
   } catch (error) {
-    if (isUniqueConstraintError(error)) return listPage(context.env, session, "That short link already exists", 409);
+    if (isUniqueConstraintError(error)) return listPage(context, session, "That short link already exists", 409);
     return textResponse("Internal server error", 500);
   }
 }
 
 async function updateLink(context: Context<AppBindings>, session: Session, id: number): Promise<Response> {
   const input = await readLinkInput(context.req.raw);
-  if ("error" in input) return listPage(context.env, session, input.error, 400);
+  if ("error" in input) return listPage(context, session, input.error, 400);
 
   const now = new Date().toISOString();
   try {
@@ -98,7 +99,7 @@ async function updateLink(context: Context<AppBindings>, session: Session, id: n
     if (!result.meta.changes) return textResponse("Not found", 404);
     return redirectResponse("/admin");
   } catch (error) {
-    if (isUniqueConstraintError(error)) return listPage(context.env, session, "That short link already exists", 409);
+    if (isUniqueConstraintError(error)) return listPage(context, session, "That short link already exists", 409);
     return textResponse("Internal server error", 500);
   }
 }
@@ -117,12 +118,12 @@ async function deleteLink(env: Env, session: Session, id: number): Promise<Respo
 
 async function createUser(context: Context<AppBindings>, session: Session): Promise<Response> {
   const form = await readFormData(context.req.raw);
-  if (!form) return listPage(context.env, session, "Invalid form data", 400);
+  if (!form) return listPage(context, session, "Invalid form data", 400);
   const username = String(form.get("username") ?? "").trim().toLowerCase();
   const password = String(form.get("password") ?? "");
-  if (!isUsername(username) || username === "admin") return listPage(context.env, session, "Enter a valid username", 400);
+  if (!isUsername(username) || username === "admin") return listPage(context, session, "Enter a valid username", 400);
   if (password.length < 12 || password.length > 256) {
-    return listPage(context.env, session, "Passwords must contain 12 to 256 characters", 400);
+    return listPage(context, session, "Passwords must contain 12 to 256 characters", 400);
   }
 
   const credentials = await createPasswordCredentials(password);
@@ -134,7 +135,7 @@ async function createUser(context: Context<AppBindings>, session: Session): Prom
       .run();
     return redirectResponse("/admin");
   } catch (error) {
-    if (isUniqueConstraintError(error)) return listPage(context.env, session, "That username already exists", 409);
+    if (isUniqueConstraintError(error)) return listPage(context, session, "That username already exists", 409);
     return textResponse("Internal server error", 500);
   }
 }
@@ -192,24 +193,41 @@ function isUniqueConstraintError(error: unknown): boolean {
   return error instanceof Error && /unique constraint/i.test(error.message);
 }
 
-async function listPage(env: Env, session: Session, error?: string, status = 200): Promise<Response> {
+async function listPage(
+  context: Context<AppBindings>,
+  session: Session,
+  error?: string,
+  status: 200 | 400 | 409 = 200,
+): Promise<Response> {
   try {
     const [links, audit, users] = await Promise.all([
-      env.DB.prepare(
+      context.env.DB.prepare(
         "SELECT id, kind, key, destination, owner_username, created_at, updated_at FROM links ORDER BY kind, key",
       ).all<Link>(),
-      env.DB.prepare(
+      context.env.DB.prepare(
         // ponytail: Show recent activity only; add pagination when 100 entries are not enough.
         "SELECT id, actor_username, action, kind, key, destination, created_at FROM audit_log ORDER BY id DESC LIMIT 100",
       ).all<AuditEntry>(),
       session.isAdmin
-        ? env.DB.prepare("SELECT username, created_at FROM users ORDER BY username").all<UserSummary>()
+        ? context.env.DB.prepare("SELECT username, created_at FROM users ORDER BY username").all<UserSummary>()
         : Promise.resolve({ results: [] as UserSummary[] }),
     ]);
-    return adminPage(links.results, audit.results, users.results, session, error, status);
+    context.status(status);
+    return context.render(
+      <AdminPage links={links.results} audit={audit.results} users={users.results} session={session} error={error} />,
+    );
   } catch {
     return textResponse("Internal server error", 500);
   }
+}
+
+async function renderLogin(
+  context: Context<AppBindings>,
+  error?: string,
+  status: 200 | 400 | 401 = 200,
+): Promise<Response> {
+  context.status(status);
+  return context.render(<LoginPage error={error} />);
 }
 
 function redirectResponse(location: string, setCookie?: string): Response {
