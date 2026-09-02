@@ -62,10 +62,10 @@ npx wrangler deploy
 
 The Worker routes require these proxied Cloudflare DNS records:
 
-| Type | Name | Value | Proxy status |
-| --- | --- | --- | --- |
-| `AAAA` | `@` | `100::` | Proxied |
-| `AAAA` | `*` | `100::` | Proxied |
+| Type   | Name | Value   | Proxy status |
+| ------ | ---- | ------- | ------------ |
+| `AAAA` | `@`  | `100::` | Proxied      |
+| `AAAA` | `*`  | `100::` | Proxied      |
 
 `100::` is an originless placeholder. The Worker responds before Cloudflare contacts an origin.
 

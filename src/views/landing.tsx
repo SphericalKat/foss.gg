@@ -1,5 +1,6 @@
-import type { FC } from "hono/jsx";
 import { raw } from "hono/html";
+import type { FC } from "hono/jsx";
+
 import { landingStyles } from "./styles";
 
 export const LandingPage: FC = () => (
@@ -7,7 +8,10 @@ export const LandingPage: FC = () => (
     <head>
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width,initial-scale=1" />
-      <meta name="description" content="Clean path and subdomain redirects on foss.gg." />
+      <meta
+        name="description"
+        content="Clean path and subdomain redirects on foss.gg."
+      />
       <title>foss.gg — URLs, cut clean</title>
       <style>{raw(landingStyles)}</style>
     </head>
@@ -15,7 +19,9 @@ export const LandingPage: FC = () => (
       <div class="shell">
         <header class="site-header">
           <a class="brand" href="/" aria-label="foss.gg home">
-            <span class="brand-mark" aria-hidden="true">↗</span>
+            <span class="brand-mark" aria-hidden="true">
+              ↗
+            </span>
             foss.gg
           </a>
           <a class="admin-link" href="/admin">
@@ -27,10 +33,14 @@ export const LandingPage: FC = () => (
             <div class="hero-copy">
               <p class="eyebrow">Cloudflare-powered redirects</p>
               <h1 id="hero-title">
-                URLs,<br />
+                URLs,
+                <br />
                 <em>cut clean.</em>
               </h1>
-              <p class="lede">Turn a path or subdomain into one clean hop to wherever you need to go.</p>
+              <p class="lede">
+                Turn a path or subdomain into one clean hop to wherever you need
+                to go.
+              </p>
               <a class="cta" href="/admin">
                 Manage links <span aria-hidden="true">→</span>
               </a>
@@ -55,7 +65,10 @@ export const LandingPage: FC = () => (
                 <span>one word</span>
               </div>
               <code>project.foss.gg</code>
-              <p>Put the memorable part first. The redirect works from every path.</p>
+              <p>
+                Put the memorable part first. The redirect works from every
+                path.
+              </p>
             </article>
           </section>
         </main>
