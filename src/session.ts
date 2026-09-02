@@ -1,10 +1,12 @@
 import { scrypt } from "node:crypto";
+import { promisify } from "node:util";
 
 import type { MiddlewareHandler } from "hono";
 
 const SESSION_COOKIE = "foss_admin_session";
 const SESSION_TTL_SECONDS = 12 * 60 * 60;
 const encoder = new TextEncoder();
+const scryptAsync = promisify(scrypt);
 
 interface User {
   username: string;
@@ -23,53 +25,81 @@ export interface AppBindings {
   Variables: { session: Session | null };
 }
 
-export const loadSession: MiddlewareHandler<AppBindings> = async (context, next) => {
-  context.set("session", await getSession(context.req.raw, context.env));
-  await next();
+const toBase64Url = (bytes: Uint8Array): string => {
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCodePoint(byte);
+  }
+  return btoa(binary)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/u, "");
 };
 
-export async function authenticate(
-  env: Env,
-  username: string,
+const fromBase64Url = (value: string): Uint8Array => {
+  const base64 = value
+    .replaceAll("-", "+")
+    .replaceAll("_", "/")
+    .padEnd(Math.ceil(value.length / 4) * 4, "=");
+  return Uint8Array.from(
+    atob(base64),
+    (character) => character.codePointAt(0) ?? 0
+  );
+};
+
+const timingSafeStringEqual = async (
+  left: string,
+  right: string
+): Promise<boolean> => {
+  const [leftDigest, rightDigest] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(left)),
+    crypto.subtle.digest("SHA-256", encoder.encode(right)),
+  ]);
+  return crypto.subtle.timingSafeEqual(leftDigest, rightDigest);
+};
+
+const sign = async (value: string, secret: string): Promise<string> => {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { hash: "SHA-256", name: "HMAC" },
+    false,
+    ["sign"]
+  );
+  const bytes = new Uint8Array(
+    await crypto.subtle.sign("HMAC", key, encoder.encode(value))
+  );
+  return toBase64Url(bytes);
+};
+
+const hashPassword = async (
   password: string,
-): Promise<string | null> {
-  if (!(await validCredentials(env, username, password))) {
-    return null;
-  }
+  salt: Uint8Array<ArrayBufferLike> = crypto.getRandomValues(new Uint8Array(16))
+): Promise<{ hash: string; salt: string }> => {
+  const derivedKey = await scryptAsync(password, salt, 32);
+  return { hash: toBase64Url(derivedKey), salt: toBase64Url(salt) };
+};
 
-  const expires = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS;
-  const payload = `${toBase64Url(encoder.encode(username))}.${expires}`;
-  const signature = await sign(payload, env.ADMIN_PASSWORD);
-  return `${SESSION_COOKIE}=${payload}.${signature}; Max-Age=${SESSION_TTL_SECONDS}; Path=/admin; HttpOnly; Secure; SameSite=Lax`;
-}
-
-export function clearSessionCookie(): string {
-  return `${SESSION_COOKIE}=; Max-Age=0; Path=/admin; HttpOnly; Secure; SameSite=Lax`;
-}
-
-export async function createPasswordCredentials(
+const verifyPassword = async (
   password: string,
-): Promise<{ hash: string; salt: string }> {
-  return hashPassword(password);
-}
-
-export function isUsername(value: string): boolean {
-  return value.length <= 32 && /^[a-z0-9](?:[a-z0-9._-]{0,30}[a-z0-9])?$/.test(value);
-}
-
-async function validCredentials(env: Env, username: string, password: string): Promise<boolean> {
-  if (username === "admin") {
-    return Boolean(env.ADMIN_PASSWORD) && timingSafeStringEqual(password, env.ADMIN_PASSWORD);
+  salt: string,
+  expectedHash: string
+): Promise<boolean> => {
+  try {
+    const actual = await hashPassword(password, fromBase64Url(salt));
+    return timingSafeStringEqual(actual.hash, expectedHash);
+  } catch {
+    return false;
   }
-  const user = await env.DB.prepare(
-    "SELECT username, password_hash, password_salt, created_at FROM users WHERE username = ?1",
-  )
-    .bind(username)
-    .first<User>();
-  return Boolean(user) && verifyPassword(password, user!.password_salt, user!.password_hash);
-}
+};
 
-async function getSession(request: Request, env: Env): Promise<Session | null> {
+export const isUsername = (value: string): boolean =>
+  value.length <= 32 && /^[a-z0-9](?:[a-z0-9._-]{0,30}[a-z0-9])?$/u.test(value);
+
+const getSession = async (
+  request: Request,
+  env: Env
+): Promise<Session | null> => {
   if (!env.ADMIN_PASSWORD) {
     return null;
   }
@@ -94,7 +124,12 @@ async function getSession(request: Request, env: Env): Promise<Session | null> {
     return null;
   }
   const payload = `${encodedUsername}.${expiresText}`;
-  if (!(await timingSafeStringEqual(signature, await sign(payload, env.ADMIN_PASSWORD)))) {
+  if (
+    !(await timingSafeStringEqual(
+      signature,
+      await sign(payload, env.ADMIN_PASSWORD)
+    ))
+  ) {
     return null;
   }
 
@@ -103,7 +138,9 @@ async function getSession(request: Request, env: Env): Promise<Session | null> {
     return null;
   }
   if (username !== "admin") {
-    const user = await env.DB.prepare("SELECT username FROM users WHERE username = ?1")
+    const user = await env.DB.prepare(
+      "SELECT username FROM users WHERE username = ?1"
+    )
       .bind(username)
       .first();
     if (!user) {
@@ -111,65 +148,56 @@ async function getSession(request: Request, env: Env): Promise<Session | null> {
     }
   }
   return { isAdmin: username === "admin", username };
-}
+};
 
-async function sign(value: string, secret: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { hash: "SHA-256", name: "HMAC" },
-    false,
-    ["sign"],
-  );
-  const bytes = new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode(value)));
-  return toBase64Url(bytes);
-}
-
-async function timingSafeStringEqual(left: string, right: string): Promise<boolean> {
-  const [leftDigest, rightDigest] = await Promise.all([
-    crypto.subtle.digest("SHA-256", encoder.encode(left)),
-    crypto.subtle.digest("SHA-256", encoder.encode(right)),
-  ]);
-  return crypto.subtle.timingSafeEqual(leftDigest, rightDigest);
-}
-
-function toBase64Url(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
-}
-
-function fromBase64Url(value: string): Uint8Array {
-  const base64 = value
-    .replaceAll("-", "+")
-    .replaceAll("_", "/")
-    .padEnd(Math.ceil(value.length / 4) * 4, "=");
-  return Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
-}
-
-async function hashPassword(
-  password: string,
-  salt: Uint8Array<ArrayBufferLike> = crypto.getRandomValues(new Uint8Array(16)),
-): Promise<{ hash: string; salt: string }> {
-  const hash = await new Promise<Uint8Array>((resolve, reject) => {
-    scrypt(password, salt, 32, (error, derivedKey) =>
-      error ? reject(error) : resolve(derivedKey),
+const validCredentials = async (
+  env: Env,
+  username: string,
+  password: string
+): Promise<boolean> => {
+  if (username === "admin") {
+    return (
+      Boolean(env.ADMIN_PASSWORD) &&
+      timingSafeStringEqual(password, env.ADMIN_PASSWORD)
     );
-  });
-  return { hash: toBase64Url(hash), salt: toBase64Url(salt) };
-}
-
-async function verifyPassword(
-  password: string,
-  salt: string,
-  expectedHash: string,
-): Promise<boolean> {
-  try {
-    const actual = await hashPassword(password, fromBase64Url(salt));
-    return timingSafeStringEqual(actual.hash, expectedHash);
-  } catch {
+  }
+  const user = await env.DB.prepare(
+    "SELECT username, password_hash, password_salt, created_at FROM users WHERE username = ?1"
+  )
+    .bind(username)
+    .first<User>();
+  if (!user) {
     return false;
   }
-}
+  return verifyPassword(password, user.password_salt, user.password_hash);
+};
+
+export const authenticate = async (
+  env: Env,
+  username: string,
+  password: string
+): Promise<string | null> => {
+  if (!(await validCredentials(env, username, password))) {
+    return null;
+  }
+
+  const expires = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS;
+  const payload = `${toBase64Url(encoder.encode(username))}.${expires}`;
+  const signature = await sign(payload, env.ADMIN_PASSWORD);
+  return `${SESSION_COOKIE}=${payload}.${signature}; Max-Age=${SESSION_TTL_SECONDS}; Path=/admin; HttpOnly; Secure; SameSite=Lax`;
+};
+
+export const clearSessionCookie = (): string =>
+  `${SESSION_COOKIE}=; Max-Age=0; Path=/admin; HttpOnly; Secure; SameSite=Lax`;
+
+export const createPasswordCredentials = (
+  password: string
+): Promise<{ hash: string; salt: string }> => hashPassword(password);
+
+export const loadSession: MiddlewareHandler<AppBindings> = async (
+  context,
+  next
+) => {
+  context.set("session", await getSession(context.req.raw, context.env));
+  return await next();
+};

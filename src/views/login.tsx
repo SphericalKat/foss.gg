@@ -11,9 +11,15 @@ export const LoginPage: FC<{ error?: string }> = ({ error }) => (
         Username <input name="username" autocomplete="username" required />
       </label>
       <label>
-        Password <input type="password" name="password" autocomplete="current-password" required />
+        Password{" "}
+        <input
+          type="password"
+          name="password"
+          autocomplete="current-password"
+          required
+        />
       </label>
-      <button>Log in</button>
+      <button type="submit">Log in</button>
     </form>
   </AdminLayout>
 );

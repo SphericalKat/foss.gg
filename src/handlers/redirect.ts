@@ -10,11 +10,36 @@ interface Link {
   destination: string;
 }
 
-export function isApexRequest(request: Request): boolean {
-  return normalizeHostname(new URL(request.url).hostname) === APEX_HOST;
-}
+const normalizeHostname = (hostname: string): string =>
+  hostname.toLowerCase().replace(/\.$/u, "");
 
-export async function handleRedirect(context: Context<AppBindings>): Promise<Response> {
+const isSubdomainKey = (value: string): boolean =>
+  value.length <= 63 && /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u.test(value);
+
+const getLookup = (
+  hostname: string,
+  pathname: string
+): { kind: LinkKind; key: string } | null => {
+  if (hostname === APEX_HOST) {
+    return { key: pathname, kind: "path" };
+  }
+  if (!hostname.endsWith(`.${APEX_HOST}`)) {
+    return null;
+  }
+
+  const label = hostname.slice(0, -APEX_HOST.length - 1);
+  if (!label || label.includes(".") || !isSubdomainKey(label)) {
+    return null;
+  }
+  return { key: label, kind: "subdomain" };
+};
+
+export const isApexRequest = (request: Request): boolean =>
+  normalizeHostname(new URL(request.url).hostname) === APEX_HOST;
+
+export const handleRedirect = async (
+  context: Context<AppBindings>
+): Promise<Response> => {
   const url = new URL(context.req.url);
   const lookup = getLookup(normalizeHostname(url.hostname), url.pathname);
   if (!lookup) {
@@ -23,7 +48,7 @@ export async function handleRedirect(context: Context<AppBindings>): Promise<Res
 
   try {
     const link = await context.env.DB.prepare(
-      "SELECT destination FROM links WHERE kind = ?1 AND key = ?2",
+      "SELECT destination FROM links WHERE kind = ?1 AND key = ?2"
     )
       .bind(lookup.kind, lookup.key)
       .first<Link>();
@@ -37,27 +62,4 @@ export async function handleRedirect(context: Context<AppBindings>): Promise<Res
   } catch {
     return context.text("Internal server error", 500);
   }
-}
-
-function normalizeHostname(hostname: string): string {
-  return hostname.toLowerCase().replace(/\.$/, "");
-}
-
-function getLookup(hostname: string, pathname: string): { kind: LinkKind; key: string } | null {
-  if (hostname === APEX_HOST) {
-    return { key: pathname, kind: "path" };
-  }
-  if (!hostname.endsWith(`.${APEX_HOST}`)) {
-    return null;
-  }
-
-  const label = hostname.slice(0, -APEX_HOST.length - 1);
-  if (!label || label.includes(".") || !isSubdomainKey(label)) {
-    return null;
-  }
-  return { key: label, kind: "subdomain" };
-}
-
-function isSubdomainKey(value: string): boolean {
-  return value.length <= 63 && /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(value);
-}
+};
