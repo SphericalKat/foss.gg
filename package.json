@@ -4,17 +4,31 @@
   "type": "module",
   "scripts": {
     "check": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vp test run",
+    "prepare": "vp config"
+  },
+  "dependencies": {
+    "hono": "^4.13.5"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.1.2",
     "@cloudflare/workers-types": "^5.20260831.1",
     "@types/node": "^26.4.0",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.11",
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:",
     "wrangler": "^4.127.1"
   },
-  "dependencies": {
-    "hono": "^4.13.5"
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.3.0",
+    "vitest": "4.1.11"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "11.25.0",
+      "onFail": "download"
+    }
   }
 }
