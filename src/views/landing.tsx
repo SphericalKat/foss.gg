@@ -1,5 +1,6 @@
-import type { FC } from "hono/jsx";
 import { raw } from "hono/html";
+import type { FC } from "hono/jsx";
+
 import { landingStyles } from "./styles";
 
 export const LandingPage: FC = () => (

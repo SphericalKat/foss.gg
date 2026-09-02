@@ -1,12 +1,14 @@
-import worker from "../src/index";
 import { env } from "cloudflare:workers";
+import { beforeEach, expect, test } from "vitest";
+
+import worker from "../src/index";
 
 const password = "test-password";
 
 async function request(path: string, init: RequestInit = {}, host = "foss.gg"): Promise<Response> {
   return worker.fetch(new Request(`https://${host}${path}`, init), {
-    DB: env.DB,
     ADMIN_PASSWORD: password,
+    DB: env.DB,
   });
 }
 
@@ -16,12 +18,12 @@ async function form(
   cookie?: string,
 ): Promise<Response> {
   return request(path, {
-    method: "POST",
+    body: new URLSearchParams(values),
     headers: {
       ...(cookie ? { Cookie: cookie } : {}),
       "Content-Type": "application/x-www-form-urlencoded",
     },
-    body: new URLSearchParams(values),
+    method: "POST",
   });
 }
 
@@ -45,13 +47,13 @@ test("serves the landing page at the apex root", async () => {
 });
 
 test("redirects path and subdomain links without forwarding source data", async () => {
-  const login = await form("/admin/login", { username: "admin", password });
+  const login = await form("/admin/login", { password, username: "admin" });
   const cookie = login.headers.get("set-cookie")?.split(";")[0];
   expect(
     (
       await form(
         "/admin/links",
-        { kind: "path", key: "go", destination: "https://example.com/a?b=c#d" },
+        { destination: "https://example.com/a?b=c#d", key: "go", kind: "path" },
         cookie!,
       )
     ).status,
@@ -60,7 +62,7 @@ test("redirects path and subdomain links without forwarding source data", async 
     (
       await form(
         "/admin/links",
-        { kind: "subdomain", key: "go", destination: "https://example.org/" },
+        { destination: "https://example.org/", key: "go", kind: "subdomain" },
         cookie!,
       )
     ).status,
@@ -76,24 +78,24 @@ test("redirects path and subdomain links without forwarding source data", async 
 
 test("requires a session and supports create, edit, delete, and validation", async () => {
   expect((await request("/admin")).status).toBe(200);
-  expect((await form("/admin/login", { username: "admin", password: "wrong" })).status).toBe(401);
+  expect((await form("/admin/login", { password: "wrong", username: "admin" })).status).toBe(401);
   expect(
     (
       await request("/admin/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: "{}",
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
       })
     ).status,
   ).toBe(400);
 
-  const login = await form("/admin/login", { username: "admin", password });
+  const login = await form("/admin/login", { password, username: "admin" });
   const cookie = login.headers.get("set-cookie")?.split(";")[0];
   expect(
     (
       await form(
         "/admin/links",
-        { kind: "path", key: "one", destination: "javascript:alert(1)" },
+        { destination: "javascript:alert(1)", key: "one", kind: "path" },
         cookie!,
       )
     ).status,
@@ -102,7 +104,7 @@ test("requires a session and supports create, edit, delete, and validation", asy
     (
       await form(
         "/admin/links",
-        { kind: "path", key: "/", destination: "https://example.com" },
+        { destination: "https://example.com", key: "/", kind: "path" },
         cookie!,
       )
     ).status,
@@ -111,7 +113,7 @@ test("requires a session and supports create, edit, delete, and validation", asy
     (
       await form(
         "/admin/links",
-        { kind: "path", key: "/admin/x", destination: "https://example.com" },
+        { destination: "https://example.com", key: "/admin/x", kind: "path" },
         cookie!,
       )
     ).status,
@@ -120,14 +122,14 @@ test("requires a session and supports create, edit, delete, and validation", asy
     (
       await form(
         "/admin/links",
-        { kind: "path", key: "one", destination: "https://example.com" },
+        { destination: "https://example.com", key: "one", kind: "path" },
         cookie!,
       )
     ).status,
   ).toBe(303);
   const duplicate = await form(
     "/admin/links",
-    { kind: "path", key: "/one", destination: "https://other.example" },
+    { destination: "https://other.example", key: "/one", kind: "path" },
     cookie!,
   );
   expect(duplicate.status).toBe(409);
@@ -140,7 +142,11 @@ test("requires a session and supports create, edit, delete, and validation", asy
     (
       await form(
         `/admin/links/${row!.id}`,
-        { kind: "subdomain", key: "edited", destination: "https://edited.example" },
+        {
+          destination: "https://edited.example",
+          key: "edited",
+          kind: "subdomain",
+        },
         cookie!,
       )
     ).status,
@@ -153,25 +159,32 @@ test("requires a session and supports create, edit, delete, and validation", asy
   const activity = await env.DB.prepare("SELECT action FROM audit_log ORDER BY id").all<{
     action: string;
   }>();
-  expect(activity.results.map(({ action }) => action)).toEqual(["created", "updated", "deleted"]);
+  expect(activity.results.map(({ action }) => action)).toStrictEqual([
+    "created",
+    "updated",
+    "deleted",
+  ]);
 });
 
 test("lets admin add users and enforces link ownership", async () => {
-  const adminLogin = await form("/admin/login", { username: "admin", password });
+  const adminLogin = await form("/admin/login", {
+    password,
+    username: "admin",
+  });
   const adminCookie = adminLogin.headers.get("set-cookie")?.split(";")[0];
 
   expect(
     (
       await form(
         "/admin/users",
-        { username: "alice", password: "correct horse battery staple" },
+        { password: "correct horse battery staple", username: "alice" },
         adminCookie!,
       )
     ).status,
   ).toBe(303);
   const userLogin = await form("/admin/login", {
-    username: "alice",
     password: "correct horse battery staple",
+    username: "alice",
   });
   const userCookie = userLogin.headers.get("set-cookie")?.split(";")[0];
 
@@ -179,7 +192,11 @@ test("lets admin add users and enforces link ownership", async () => {
     (
       await form(
         "/admin/links",
-        { kind: "path", key: "admin-link", destination: "https://admin.example" },
+        {
+          destination: "https://admin.example",
+          key: "admin-link",
+          kind: "path",
+        },
         adminCookie!,
       )
     ).status,
@@ -191,7 +208,7 @@ test("lets admin add users and enforces link ownership", async () => {
     (
       await form(
         `/admin/links/${adminLink!.id}`,
-        { kind: "path", key: "stolen", destination: "https://alice.example" },
+        { destination: "https://alice.example", key: "stolen", kind: "path" },
         userCookie!,
       )
     ).status,
@@ -202,7 +219,11 @@ test("lets admin add users and enforces link ownership", async () => {
     (
       await form(
         "/admin/links",
-        { kind: "path", key: "alice-link", destination: "https://alice.example" },
+        {
+          destination: "https://alice.example",
+          key: "alice-link",
+          kind: "path",
+        },
         userCookie!,
       )
     ).status,
@@ -214,7 +235,11 @@ test("lets admin add users and enforces link ownership", async () => {
     (
       await form(
         `/admin/links/${aliceLink!.id}`,
-        { kind: "path", key: "admin-takeover", destination: "https://admin.example" },
+        {
+          destination: "https://admin.example",
+          key: "admin-takeover",
+          kind: "path",
+        },
         adminCookie!,
       )
     ).status,
@@ -224,7 +249,7 @@ test("lets admin add users and enforces link ownership", async () => {
     (
       await form(
         "/admin/users",
-        { username: "mallory", password: "correct horse battery staple" },
+        { password: "correct horse battery staple", username: "mallory" },
         userCookie!,
       )
     ).status,

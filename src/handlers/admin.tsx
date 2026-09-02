@@ -1,21 +1,23 @@
-import { Hono, type Context } from "hono";
+import { Hono } from "hono";
+import type { Context } from "hono";
+
 import {
   authenticate,
   clearSessionCookie,
   createPasswordCredentials,
   isUsername,
   loadSession,
-  type AppBindings,
-  type Session,
 } from "../session";
-import { AdminPage, type AuditEntry, type Link, type UserSummary } from "../views/admin";
+import type { AppBindings, Session } from "../session";
+import { AdminPage } from "../views/admin";
+import type { AuditEntry, Link, UserSummary } from "../views/admin";
 import { LoginPage } from "../views/login";
 
-type LinkInput = {
+interface LinkInput {
   kind: Link["kind"];
   key: string;
   destination: string;
-};
+}
 
 export const adminRoutes = new Hono<AppBindings>();
 
@@ -28,13 +30,16 @@ adminRoutes.get("/", async (context) => {
 
 adminRoutes.post("/login", async (context) => {
   const form = await readFormData(context.req.raw);
-  if (!form) return renderLogin(context, "Invalid form data", 400);
+  if (!form) {
+    return renderLogin(context, "Invalid form data", 400);
+  }
   const username = String(form.get("username") ?? "")
     .trim()
     .toLowerCase();
   const password = String(form.get("password") ?? "");
-  if (!isUsername(username) || password.length > 256)
+  if (!isUsername(username) || password.length > 256) {
     return renderLogin(context, "Invalid username or password", 401);
+  }
 
   const cookie = await authenticate(context.env, username, password);
   return cookie
@@ -43,7 +48,9 @@ adminRoutes.post("/login", async (context) => {
 });
 
 adminRoutes.use("*", async (context, next) => {
-  if (!context.get("session")) return renderLogin(context);
+  if (!context.get("session")) {
+    return renderLogin(context);
+  }
   await next();
 });
 
@@ -68,7 +75,9 @@ adminRoutes.all("*", () => textResponse("Not found", 404));
 
 async function createLink(context: Context<AppBindings>, session: Session): Promise<Response> {
   const input = await readLinkInput(context.req.raw);
-  if ("error" in input) return listPage(context, session, input.error, 400);
+  if ("error" in input) {
+    return listPage(context, session, input.error, 400);
+  }
 
   const now = new Date().toISOString();
   try {
@@ -82,8 +91,9 @@ async function createLink(context: Context<AppBindings>, session: Session): Prom
     ]);
     return redirectResponse("/admin");
   } catch (error) {
-    if (isUniqueConstraintError(error))
+    if (isUniqueConstraintError(error)) {
       return listPage(context, session, "That short link already exists", 409);
+    }
     return textResponse("Internal server error", 500);
   }
 }
@@ -94,7 +104,9 @@ async function updateLink(
   id: number,
 ): Promise<Response> {
   const input = await readLinkInput(context.req.raw);
-  if ("error" in input) return listPage(context, session, input.error, 400);
+  if ("error" in input) {
+    return listPage(context, session, input.error, 400);
+  }
 
   const now = new Date().toISOString();
   try {
@@ -106,11 +118,14 @@ async function updateLink(
         "INSERT INTO audit_log (actor_username, action, kind, key, destination, created_at) SELECT ?1, 'updated', kind, key, destination, ?2 FROM links WHERE id = ?3 AND owner_username = ?1",
       ).bind(session.username, now, id),
     ]);
-    if (!result.meta.changes) return textResponse("Not found", 404);
+    if (!result.meta.changes) {
+      return textResponse("Not found", 404);
+    }
     return redirectResponse("/admin");
   } catch (error) {
-    if (isUniqueConstraintError(error))
+    if (isUniqueConstraintError(error)) {
       return listPage(context, session, "That short link already exists", 409);
+    }
     return textResponse("Internal server error", 500);
   }
 }
@@ -126,19 +141,24 @@ async function deleteLink(env: Env, session: Session, id: number): Promise<Respo
       session.username,
     ),
   ]);
-  if (!result.meta.changes) return textResponse("Not found", 404);
+  if (!result.meta.changes) {
+    return textResponse("Not found", 404);
+  }
   return redirectResponse("/admin");
 }
 
 async function createUser(context: Context<AppBindings>, session: Session): Promise<Response> {
   const form = await readFormData(context.req.raw);
-  if (!form) return listPage(context, session, "Invalid form data", 400);
+  if (!form) {
+    return listPage(context, session, "Invalid form data", 400);
+  }
   const username = String(form.get("username") ?? "")
     .trim()
     .toLowerCase();
   const password = String(form.get("password") ?? "");
-  if (!isUsername(username) || username === "admin")
+  if (!isUsername(username) || username === "admin") {
     return listPage(context, session, "Enter a valid username", 400);
+  }
   if (password.length < 12 || password.length > 256) {
     return listPage(context, session, "Passwords must contain 12 to 256 characters", 400);
   }
@@ -152,20 +172,27 @@ async function createUser(context: Context<AppBindings>, session: Session): Prom
       .run();
     return redirectResponse("/admin");
   } catch (error) {
-    if (isUniqueConstraintError(error))
+    if (isUniqueConstraintError(error)) {
       return listPage(context, session, "That username already exists", 409);
+    }
     return textResponse("Internal server error", 500);
   }
 }
 
 async function readLinkInput(request: Request): Promise<LinkInput | { error: string }> {
   const form = await readFormData(request);
-  if (!form) return { error: "Invalid form data" };
+  if (!form) {
+    return { error: "Invalid form data" };
+  }
   const rawKind = String(form.get("kind") ?? "");
   const rawKey = String(form.get("key") ?? "").trim();
   const destination = String(form.get("destination") ?? "").trim();
-  if (rawKind !== "path" && rawKind !== "subdomain") return { error: "Choose a valid link type" };
-  if (!rawKey) return { error: "Enter a valid short-link key" };
+  if (rawKind !== "path" && rawKind !== "subdomain") {
+    return { error: "Choose a valid link type" };
+  }
+  if (!rawKey) {
+    return { error: "Enter a valid short-link key" };
+  }
   const kind = rawKind as Link["kind"];
   const key = kind === "path" ? normalizePathKey(rawKey) : rawKey.toLowerCase();
   if (!key || (kind === "path" ? !isPathKey(key) : !isSubdomainKey(key))) {
@@ -174,9 +201,10 @@ async function readLinkInput(request: Request): Promise<LinkInput | { error: str
   if (kind === "path" && (key === "/" || key === "/admin" || key.startsWith("/admin/"))) {
     return { error: "The root and /admin routes are reserved" };
   }
-  if (!isDestination(destination))
+  if (!isDestination(destination)) {
     return { error: "Destination must be an absolute HTTP or HTTPS URL" };
-  return { kind, key, destination };
+  }
+  return { destination, key, kind };
 }
 
 async function readFormData(request: Request): Promise<FormData | null> {
@@ -260,11 +288,19 @@ async function renderLogin(
 }
 
 function redirectResponse(location: string, setCookie?: string): Response {
-  const headers = new Headers({ Location: location, "Cache-Control": "no-store" });
-  if (setCookie) headers.set("Set-Cookie", setCookie);
-  return new Response(null, { status: 303, headers });
+  const headers = new Headers({
+    "Cache-Control": "no-store",
+    Location: location,
+  });
+  if (setCookie) {
+    headers.set("Set-Cookie", setCookie);
+  }
+  return new Response(null, { headers, status: 303 });
 }
 
 function textResponse(body: string, status: number): Response {
-  return new Response(body, { status, headers: { "Content-Type": "text/plain; charset=UTF-8" } });
+  return new Response(body, {
+    headers: { "Content-Type": "text/plain; charset=UTF-8" },
+    status,
+  });
 }

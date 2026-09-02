@@ -1,13 +1,14 @@
 import type { Context } from "hono";
+
 import type { AppBindings } from "../session";
 
 const APEX_HOST = "foss.gg";
 
 type LinkKind = "path" | "subdomain";
 
-type Link = {
+interface Link {
   destination: string;
-};
+}
 
 export function isApexRequest(request: Request): boolean {
   return normalizeHostname(new URL(request.url).hostname) === APEX_HOST;
@@ -16,7 +17,9 @@ export function isApexRequest(request: Request): boolean {
 export async function handleRedirect(context: Context<AppBindings>): Promise<Response> {
   const url = new URL(context.req.url);
   const lookup = getLookup(normalizeHostname(url.hostname), url.pathname);
-  if (!lookup) return context.text("Not found", 404);
+  if (!lookup) {
+    return context.text("Not found", 404);
+  }
 
   try {
     const link = await context.env.DB.prepare(
@@ -26,7 +29,10 @@ export async function handleRedirect(context: Context<AppBindings>): Promise<Res
       .first<Link>();
 
     return link
-      ? new Response(null, { status: 302, headers: { Location: link.destination } })
+      ? new Response(null, {
+          headers: { Location: link.destination },
+          status: 302,
+        })
       : context.text("Not found", 404);
   } catch {
     return context.text("Internal server error", 500);
@@ -38,12 +44,18 @@ function normalizeHostname(hostname: string): string {
 }
 
 function getLookup(hostname: string, pathname: string): { kind: LinkKind; key: string } | null {
-  if (hostname === APEX_HOST) return { kind: "path", key: pathname };
-  if (!hostname.endsWith(`.${APEX_HOST}`)) return null;
+  if (hostname === APEX_HOST) {
+    return { key: pathname, kind: "path" };
+  }
+  if (!hostname.endsWith(`.${APEX_HOST}`)) {
+    return null;
+  }
 
   const label = hostname.slice(0, -APEX_HOST.length - 1);
-  if (!label || label.includes(".") || !isSubdomainKey(label)) return null;
-  return { kind: "subdomain", key: label };
+  if (!label || label.includes(".") || !isSubdomainKey(label)) {
+    return null;
+  }
+  return { key: label, kind: "subdomain" };
 }
 
 function isSubdomainKey(value: string): boolean {

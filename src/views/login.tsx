@@ -1,4 +1,5 @@
 import type { FC } from "hono/jsx";
+
 import { AdminLayout } from "./layout";
 
 export const LoginPage: FC<{ error?: string }> = ({ error }) => (

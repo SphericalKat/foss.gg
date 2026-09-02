@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { jsxRenderer } from "hono/jsx-renderer";
+
 import { adminRoutes } from "./handlers/admin";
 import { handleRedirect, isApexRequest } from "./handlers/redirect";
 import type { AppBindings } from "./session";
@@ -22,7 +23,9 @@ app.use("*", async (context, next) => {
 });
 
 app.use("*", async (context, next) => {
-  if (!isApexRequest(context.req.raw)) return handleRedirect(context);
+  if (!isApexRequest(context.req.raw)) {
+    return handleRedirect(context);
+  }
   await next();
 });
 

@@ -1,5 +1,6 @@
-import type { FC, PropsWithChildren } from "hono/jsx";
 import { raw } from "hono/html";
+import type { FC, PropsWithChildren } from "hono/jsx";
+
 import { adminStyles } from "./styles";
 
 type AdminLayoutProps = PropsWithChildren<{ title: string }>;

@@ -1,8 +1,9 @@
 import type { FC } from "hono/jsx";
+
 import type { Session } from "../session";
 import { AdminLayout } from "./layout";
 
-export type Link = {
+export interface Link {
   id: number;
   kind: "path" | "subdomain";
   key: string;
@@ -10,9 +11,9 @@ export type Link = {
   owner_username: string;
   created_at: string;
   updated_at: string;
-};
+}
 
-export type AuditEntry = {
+export interface AuditEntry {
   id: number;
   actor_username: string;
   action: "created" | "updated" | "deleted";
@@ -20,20 +21,20 @@ export type AuditEntry = {
   key: string;
   destination: string;
   created_at: string;
-};
+}
 
-export type UserSummary = {
+export interface UserSummary {
   username: string;
   created_at: string;
-};
+}
 
-type AdminPageProps = {
+interface AdminPageProps {
   links: Link[];
   audit: AuditEntry[];
   users: UserSummary[];
   session: Session;
   error?: string;
-};
+}
 
 export const AdminPage: FC<AdminPageProps> = ({ links, audit, users, session, error }) => (
   <AdminLayout title="foss.gg links">

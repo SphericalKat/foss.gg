@@ -4,9 +4,8 @@
   "type": "module",
   "scripts": {
     "check": "ultracite check",
-    "test": "vp test run",
-    "prepare": "vp config",
-    "fix": "ultracite fix"
+    "fix": "ultracite fix",
+    "test": "vitest run"
   },
   "dependencies": {
     "hono": "^4.13.5"
@@ -17,16 +16,12 @@
     "@types/node": "^26.4.0",
     "oxfmt": "^0.66.0",
     "oxlint": "^1.81.0",
+    "oxlint-tsgolint": "7.0.2001",
     "typescript": "^7.0.2",
     "ultracite": "7.10.7",
-    "vite": "catalog:",
-    "vite-plus": "catalog:",
-    "vitest": "catalog:",
+    "vite": "^8.2.2",
+    "vitest": "4.1.11",
     "wrangler": "^4.127.1"
-  },
-  "overrides": {
-    "vite": "npm:@voidzero-dev/vite-plus-core@0.3.0",
-    "vitest": "4.1.11"
   },
   "devEngines": {
     "packageManager": {
