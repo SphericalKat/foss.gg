@@ -62,14 +62,24 @@ export const AdminPage: FC<AdminPageProps> = ({ links, audit, users, session, er
     <section>
       <h2>Saved links</h2>
       <ul>
-        {links.length ? links.map((link) => <LinkRow key={link.id} link={link} session={session} />) : <li>No links yet</li>}
+        {links.length ? (
+          links.map((link) => <LinkRow key={link.id} link={link} session={session} />)
+        ) : (
+          <li>No links yet</li>
+        )}
       </ul>
     </section>
     {session.isAdmin && (
       <section>
         <h2>Users</h2>
         <form method="post" action="/admin/users">
-          <input name="username" placeholder="username" autocomplete="off" maxlength={32} required />
+          <input
+            name="username"
+            placeholder="username"
+            autocomplete="off"
+            maxlength={32}
+            required
+          />
           <input
             type="password"
             name="password"
@@ -120,8 +130,12 @@ const LinkRow: FC<{ link: Link; session: Session }> = ({ link, session }) => (
       <>
         <form method="post" action={`/admin/links/${link.id}`}>
           <select name="kind">
-            <option value="path" selected={link.kind === "path"}>Path</option>
-            <option value="subdomain" selected={link.kind === "subdomain"}>Subdomain</option>
+            <option value="path" selected={link.kind === "path"}>
+              Path
+            </option>
+            <option value="subdomain" selected={link.kind === "subdomain"}>
+              Subdomain
+            </option>
           </select>
           <input name="key" value={link.key} required />
           <input type="url" name="destination" value={link.destination} required />

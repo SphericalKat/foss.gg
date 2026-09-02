@@ -24,7 +24,11 @@ export const loadSession: MiddlewareHandler<AppBindings> = async (context, next)
   await next();
 };
 
-export async function authenticate(env: Env, username: string, password: string): Promise<string | null> {
+export async function authenticate(
+  env: Env,
+  username: string,
+  password: string,
+): Promise<string | null> {
   if (!(await validCredentials(env, username, password))) return null;
 
   const expires = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS;
@@ -37,7 +41,9 @@ export function clearSessionCookie(): string {
   return `${SESSION_COOKIE}=; Max-Age=0; Path=/admin; HttpOnly; Secure; SameSite=Lax`;
 }
 
-export async function createPasswordCredentials(password: string): Promise<{ hash: string; salt: string }> {
+export async function createPasswordCredentials(
+  password: string,
+): Promise<{ hash: string; salt: string }> {
   return hashPassword(password);
 }
 
@@ -46,7 +52,8 @@ export function isUsername(value: string): boolean {
 }
 
 async function validCredentials(env: Env, username: string, password: string): Promise<boolean> {
-  if (username === "admin") return Boolean(env.ADMIN_PASSWORD) && timingSafeStringEqual(password, env.ADMIN_PASSWORD);
+  if (username === "admin")
+    return Boolean(env.ADMIN_PASSWORD) && timingSafeStringEqual(password, env.ADMIN_PASSWORD);
   const user = await env.DB.prepare(
     "SELECT username, password_hash, password_salt, created_at FROM users WHERE username = ?1",
   )
@@ -67,14 +74,23 @@ async function getSession(request: Request, env: Env): Promise<Session | null> {
 
   const [encodedUsername, expiresText, signature] = token.split(".");
   const expires = Number(expiresText);
-  if (!encodedUsername || !Number.isSafeInteger(expires) || expires <= Math.floor(Date.now() / 1000) || !signature) return null;
+  if (
+    !encodedUsername ||
+    !Number.isSafeInteger(expires) ||
+    expires <= Math.floor(Date.now() / 1000) ||
+    !signature
+  )
+    return null;
   const payload = `${encodedUsername}.${expiresText}`;
-  if (!(await timingSafeStringEqual(signature, await sign(payload, env.ADMIN_PASSWORD)))) return null;
+  if (!(await timingSafeStringEqual(signature, await sign(payload, env.ADMIN_PASSWORD))))
+    return null;
 
   const username = new TextDecoder().decode(fromBase64Url(encodedUsername));
   if (!isUsername(username)) return null;
   if (username !== "admin") {
-    const user = await env.DB.prepare("SELECT username FROM users WHERE username = ?1").bind(username).first();
+    const user = await env.DB.prepare("SELECT username FROM users WHERE username = ?1")
+      .bind(username)
+      .first();
     if (!user) return null;
   }
   return { username, isAdmin: username === "admin" };
@@ -107,7 +123,10 @@ function toBase64Url(bytes: Uint8Array): string {
 }
 
 function fromBase64Url(value: string): Uint8Array {
-  const base64 = value.replaceAll("-", "+").replaceAll("_", "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
+  const base64 = value
+    .replaceAll("-", "+")
+    .replaceAll("_", "/")
+    .padEnd(Math.ceil(value.length / 4) * 4, "=");
   return Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
 }
 
@@ -116,12 +135,18 @@ async function hashPassword(
   salt: Uint8Array<ArrayBufferLike> = crypto.getRandomValues(new Uint8Array(16)),
 ): Promise<{ hash: string; salt: string }> {
   const hash = await new Promise<Uint8Array>((resolve, reject) => {
-    scrypt(password, salt, 32, (error, derivedKey) => (error ? reject(error) : resolve(derivedKey)));
+    scrypt(password, salt, 32, (error, derivedKey) =>
+      error ? reject(error) : resolve(derivedKey),
+    );
   });
   return { hash: toBase64Url(hash), salt: toBase64Url(salt) };
 }
 
-async function verifyPassword(password: string, salt: string, expectedHash: string): Promise<boolean> {
+async function verifyPassword(
+  password: string,
+  salt: string,
+  expectedHash: string,
+): Promise<boolean> {
   try {
     const actual = await hashPassword(password, fromBase64Url(salt));
     return timingSafeStringEqual(actual.hash, expectedHash);

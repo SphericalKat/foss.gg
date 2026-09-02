@@ -15,7 +15,9 @@ export const LandingPage: FC = () => (
       <div class="shell">
         <header class="site-header">
           <a class="brand" href="/" aria-label="foss.gg home">
-            <span class="brand-mark" aria-hidden="true">↗</span>
+            <span class="brand-mark" aria-hidden="true">
+              ↗
+            </span>
             foss.gg
           </a>
           <a class="admin-link" href="/admin">
@@ -27,10 +29,13 @@ export const LandingPage: FC = () => (
             <div class="hero-copy">
               <p class="eyebrow">Cloudflare-powered redirects</p>
               <h1 id="hero-title">
-                URLs,<br />
+                URLs,
+                <br />
                 <em>cut clean.</em>
               </h1>
-              <p class="lede">Turn a path or subdomain into one clean hop to wherever you need to go.</p>
+              <p class="lede">
+                Turn a path or subdomain into one clean hop to wherever you need to go.
+              </p>
               <a class="cta" href="/admin">
                 Manage links <span aria-hidden="true">→</span>
               </a>

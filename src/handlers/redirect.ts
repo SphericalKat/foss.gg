@@ -19,7 +19,9 @@ export async function handleRedirect(context: Context<AppBindings>): Promise<Res
   if (!lookup) return context.text("Not found", 404);
 
   try {
-    const link = await context.env.DB.prepare("SELECT destination FROM links WHERE kind = ?1 AND key = ?2")
+    const link = await context.env.DB.prepare(
+      "SELECT destination FROM links WHERE kind = ?1 AND key = ?2",
+    )
       .bind(lookup.kind, lookup.key)
       .first<Link>();
 

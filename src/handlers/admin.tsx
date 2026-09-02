@@ -29,12 +29,17 @@ adminRoutes.get("/", async (context) => {
 adminRoutes.post("/login", async (context) => {
   const form = await readFormData(context.req.raw);
   if (!form) return renderLogin(context, "Invalid form data", 400);
-  const username = String(form.get("username") ?? "").trim().toLowerCase();
+  const username = String(form.get("username") ?? "")
+    .trim()
+    .toLowerCase();
   const password = String(form.get("password") ?? "");
-  if (!isUsername(username) || password.length > 256) return renderLogin(context, "Invalid username or password", 401);
+  if (!isUsername(username) || password.length > 256)
+    return renderLogin(context, "Invalid username or password", 401);
 
   const cookie = await authenticate(context.env, username, password);
-  return cookie ? redirectResponse("/admin", cookie) : renderLogin(context, "Invalid username or password", 401);
+  return cookie
+    ? redirectResponse("/admin", cookie)
+    : renderLogin(context, "Invalid username or password", 401);
 });
 
 adminRoutes.use("*", async (context, next) => {
@@ -77,12 +82,17 @@ async function createLink(context: Context<AppBindings>, session: Session): Prom
     ]);
     return redirectResponse("/admin");
   } catch (error) {
-    if (isUniqueConstraintError(error)) return listPage(context, session, "That short link already exists", 409);
+    if (isUniqueConstraintError(error))
+      return listPage(context, session, "That short link already exists", 409);
     return textResponse("Internal server error", 500);
   }
 }
 
-async function updateLink(context: Context<AppBindings>, session: Session, id: number): Promise<Response> {
+async function updateLink(
+  context: Context<AppBindings>,
+  session: Session,
+  id: number,
+): Promise<Response> {
   const input = await readLinkInput(context.req.raw);
   if ("error" in input) return listPage(context, session, input.error, 400);
 
@@ -99,7 +109,8 @@ async function updateLink(context: Context<AppBindings>, session: Session, id: n
     if (!result.meta.changes) return textResponse("Not found", 404);
     return redirectResponse("/admin");
   } catch (error) {
-    if (isUniqueConstraintError(error)) return listPage(context, session, "That short link already exists", 409);
+    if (isUniqueConstraintError(error))
+      return listPage(context, session, "That short link already exists", 409);
     return textResponse("Internal server error", 500);
   }
 }
@@ -110,7 +121,10 @@ async function deleteLink(env: Env, session: Session, id: number): Promise<Respo
     env.DB.prepare(
       "INSERT INTO audit_log (actor_username, action, kind, key, destination, created_at) SELECT ?1, 'deleted', kind, key, destination, ?2 FROM links WHERE id = ?3 AND owner_username = ?1",
     ).bind(session.username, now, id),
-    env.DB.prepare("DELETE FROM links WHERE id = ?1 AND owner_username = ?2").bind(id, session.username),
+    env.DB.prepare("DELETE FROM links WHERE id = ?1 AND owner_username = ?2").bind(
+      id,
+      session.username,
+    ),
   ]);
   if (!result.meta.changes) return textResponse("Not found", 404);
   return redirectResponse("/admin");
@@ -119,9 +133,12 @@ async function deleteLink(env: Env, session: Session, id: number): Promise<Respo
 async function createUser(context: Context<AppBindings>, session: Session): Promise<Response> {
   const form = await readFormData(context.req.raw);
   if (!form) return listPage(context, session, "Invalid form data", 400);
-  const username = String(form.get("username") ?? "").trim().toLowerCase();
+  const username = String(form.get("username") ?? "")
+    .trim()
+    .toLowerCase();
   const password = String(form.get("password") ?? "");
-  if (!isUsername(username) || username === "admin") return listPage(context, session, "Enter a valid username", 400);
+  if (!isUsername(username) || username === "admin")
+    return listPage(context, session, "Enter a valid username", 400);
   if (password.length < 12 || password.length > 256) {
     return listPage(context, session, "Passwords must contain 12 to 256 characters", 400);
   }
@@ -135,7 +152,8 @@ async function createUser(context: Context<AppBindings>, session: Session): Prom
       .run();
     return redirectResponse("/admin");
   } catch (error) {
-    if (isUniqueConstraintError(error)) return listPage(context, session, "That username already exists", 409);
+    if (isUniqueConstraintError(error))
+      return listPage(context, session, "That username already exists", 409);
     return textResponse("Internal server error", 500);
   }
 }
@@ -156,7 +174,8 @@ async function readLinkInput(request: Request): Promise<LinkInput | { error: str
   if (kind === "path" && (key === "/" || key === "/admin" || key.startsWith("/admin/"))) {
     return { error: "The root and /admin routes are reserved" };
   }
-  if (!isDestination(destination)) return { error: "Destination must be an absolute HTTP or HTTPS URL" };
+  if (!isDestination(destination))
+    return { error: "Destination must be an absolute HTTP or HTTPS URL" };
   return { kind, key, destination };
 }
 
@@ -173,7 +192,9 @@ function normalizePathKey(value: string): string {
 }
 
 function isPathKey(value: string): boolean {
-  return value.length <= 2048 && /^\/[\S]*$/.test(value) && !value.includes("?") && !value.includes("#");
+  return (
+    value.length <= 2048 && /^\/[\S]*$/.test(value) && !value.includes("?") && !value.includes("#")
+  );
 }
 
 function isSubdomainKey(value: string): boolean {
@@ -209,12 +230,20 @@ async function listPage(
         "SELECT id, actor_username, action, kind, key, destination, created_at FROM audit_log ORDER BY id DESC LIMIT 100",
       ).all<AuditEntry>(),
       session.isAdmin
-        ? context.env.DB.prepare("SELECT username, created_at FROM users ORDER BY username").all<UserSummary>()
+        ? context.env.DB.prepare(
+            "SELECT username, created_at FROM users ORDER BY username",
+          ).all<UserSummary>()
         : Promise.resolve({ results: [] as UserSummary[] }),
     ]);
     context.status(status);
     return context.render(
-      <AdminPage links={links.results} audit={audit.results} users={users.results} session={session} error={error} />,
+      <AdminPage
+        links={links.results}
+        audit={audit.results}
+        users={users.results}
+        session={session}
+        error={error}
+      />,
     );
   } catch {
     return textResponse("Internal server error", 500);
