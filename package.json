@@ -3,9 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "tsc --noEmit",
+    "check": "ultracite check",
     "test": "vp test run",
-    "prepare": "vp config"
+    "prepare": "vp config",
+    "fix": "ultracite fix"
   },
   "dependencies": {
     "hono": "^4.13.5"
@@ -14,7 +15,10 @@
     "@cloudflare/vitest-plugin": "^1.1.2",
     "@cloudflare/workers-types": "^5.20260831.1",
     "@types/node": "^26.4.0",
+    "oxfmt": "^0.66.0",
+    "oxlint": "^1.81.0",
     "typescript": "^7.0.2",
+    "ultracite": "7.10.7",
     "vite": "catalog:",
     "vite-plus": "catalog:",
     "vitest": "catalog:",
