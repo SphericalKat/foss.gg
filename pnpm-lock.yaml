@@ -209,7 +209,7 @@ importers:
     dependencies:
       hono:
         specifier: ^4.13.5
-        version: 4.13.5
+        version: 4.13.7
     devDependencies:
       '@cloudflare/vitest-plugin':
         specifier: ^1.1.2
@@ -1386,8 +1386,8 @@ packages:
     resolution: {integrity: sha512-AOIgSQCepiJYwP3ARnGx+5VnTu2HBYdzbGP45eLw1vr3zB3vZLeyed1sC9hnbcOc9/SrMyM5RPQrkGz4aS9Zow==}
     engines: {node: '>= 6'}
 
-  hono@4.13.5:
-    resolution: {integrity: sha512-O6+/eCYRkzzzy0rPWwKLiGBR1nFuUPZynnwjxN1MBA62NNqbT0wQEzQyK2gSO5yDIDB336sXQleAhOHrzlYyKw==}
+  hono@4.13.7:
+    resolution: {integrity: sha512-c8/gF9ac8Y78/agExVocyLevgR+JlpNB444Py0FSX8pJoPdYUfUzRcXtYEYGwt6l19qIlVZPN5Mfsw9jFShmQQ==}
     engines: {node: '>=16.9.0'}
 
   human-signals@8.0.1:
@@ -2650,7 +2650,7 @@ snapshots:
     dependencies:
       is-glob: 4.0.3
 
-  hono@4.13.5: {}
+  hono@4.13.7: {}
 
   human-signals@8.0.1: {}
 
