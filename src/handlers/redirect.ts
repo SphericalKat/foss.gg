@@ -38,17 +38,9 @@ const getLookup = (
 };
 
 const getEffectiveHostname = (request: Request): string => {
-  const url = new URL(request.url);
-  const override = url.searchParams.get("__host");
-  if (override) {
-    return normalizeHostname(override.split(":")[0] ?? "");
-  }
-  const xHost =
-    request.headers.get("x-host") ?? request.headers.get("x-forwarded-host");
-  if (xHost) {
-    return normalizeHostname(xHost.split(":")[0] ?? "");
-  }
-  const urlHostname = normalizeHostname(url.hostname);
+  // Use the canonical Host header when it is a trusted foss.gg host;
+  // otherwise fall back to the URL hostname. Do not trust x-host or query params.
+  const urlHostname = normalizeHostname(new URL(request.url).hostname);
   const hostHeader = request.headers.get("host");
   if (hostHeader) {
     const headerHostname = normalizeHostname(hostHeader.split(":")[0] ?? "");

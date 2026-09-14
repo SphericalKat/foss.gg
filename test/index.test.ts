@@ -283,6 +283,101 @@ describe("foss.gg worker", () => {
     expect(takeover.status).toBe(404);
   });
 
+  test("supports per-path subdomain links with fallback to apex subdomain", async () => {
+    const cookie = await loginCookie("admin", password);
+    await form(
+      "/admin/links",
+      { destination: "https://example.org/", key: "go", kind: "subdomain" },
+      cookie
+    );
+    await form(
+      "/admin/links",
+      {
+        destination: "https://example.com/rsvp",
+        key: "go/rsvp",
+        kind: "subdomain",
+      },
+      cookie
+    );
+
+    const rsvpResponse = await request("/rsvp", {}, "go.foss.gg");
+    expect(rsvpResponse.status).toBe(302);
+    expect(rsvpResponse.headers.get("location")).toBe(
+      "https://example.com/rsvp"
+    );
+
+    const fallbackResponse = await request("/anything", {}, "go.foss.gg");
+    expect(fallbackResponse.status).toBe(302);
+    expect(fallbackResponse.headers.get("location")).toBe(
+      "https://example.org/"
+    );
+  });
+
+  test("requires parent subdomain for per-path links", async () => {
+    const cookie = await loginCookie("admin", password);
+    const withoutParent = await form(
+      "/admin/links",
+      {
+        destination: "https://example.com/tickets",
+        key: "example/tickets",
+        kind: "subdomain",
+      },
+      cookie
+    );
+    expect(withoutParent.status).toBe(400);
+
+    const parentCreated = await form(
+      "/admin/links",
+      {
+        destination: "https://example.com/",
+        key: "example",
+        kind: "subdomain",
+      },
+      cookie
+    );
+    expect(parentCreated.status).toBe(303);
+
+    const withParent = await form(
+      "/admin/links",
+      {
+        destination: "https://example.com/tickets",
+        key: "example/tickets",
+        kind: "subdomain",
+      },
+      cookie
+    );
+    expect(withParent.status).toBe(303);
+
+    const rsvpResponse = await request("/tickets", {}, "example.foss.gg");
+    expect(rsvpResponse.headers.get("location")).toBe(
+      "https://example.com/tickets"
+    );
+  });
+
+  test("prevents converting last parent into a child", async () => {
+    const cookie = await loginCookie("admin", password);
+    await form(
+      "/admin/links",
+      {
+        destination: "https://example.com/",
+        key: "convert",
+        kind: "subdomain",
+      },
+      cookie
+    );
+    const id = await linkId("convert");
+    const converted = await form(
+      `/admin/links/${id}`,
+      {
+        destination: "https://example.com/tickets",
+        key: "convert/tickets",
+        kind: "subdomain",
+      },
+      cookie
+    );
+    expect(converted.status).toBe(400);
+  });
+
   test("returns not found for unsupported host forms and missing links", async () => {
     const missing = await request("/missing");
     expect(missing.status).toBe(404);

@@ -83,7 +83,12 @@ const normalizeSubdomainKey = (value: string): string => {
   if (slashIndex === -1) {
     return label;
   }
-  const path = normalizePathKey(value.slice(slashIndex));
+  const rawPath = value.slice(slashIndex);
+  // Prevent storing unreachable `label/` -> `label` is the same as root, so normalize to parent.
+  if (rawPath === "/") {
+    return label;
+  }
+  const path = normalizePathKey(rawPath);
   return isPathKey(path) ? `${label}${path}` : "";
 };
 
@@ -132,17 +137,25 @@ const readLinkInput = async (
 
 const ensureSubdomainParentExists = async (
   db: D1Database,
-  key: string
+  key: string,
+  excludeId?: number
 ): Promise<string | null> => {
   const slashIndex = key.indexOf("/");
   if (slashIndex === -1) {
     return null;
   }
   const parent = key.slice(0, slashIndex);
-  const row = await db
-    .prepare("SELECT 1 FROM links WHERE kind = ?1 AND key = ?2")
-    .bind("subdomain", parent)
-    .first();
+  const row = excludeId
+    ? await db
+        .prepare(
+          "SELECT 1 FROM links WHERE kind = ?1 AND key = ?2 AND id != ?3"
+        )
+        .bind("subdomain", parent, excludeId)
+        .first()
+    : await db
+        .prepare("SELECT 1 FROM links WHERE kind = ?1 AND key = ?2")
+        .bind("subdomain", parent)
+        .first();
   return row ? null : `Create ${parent}.foss.gg first`;
 };
 
@@ -234,7 +247,8 @@ const updateLink = async (
   if (input.kind === "subdomain") {
     const parentError = await ensureSubdomainParentExists(
       context.env.DB,
-      input.key
+      input.key,
+      id
     );
     if (parentError) {
       return listPage(context, session, parentError, 400);
