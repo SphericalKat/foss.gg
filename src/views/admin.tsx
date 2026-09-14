@@ -100,7 +100,11 @@ export const AdminPage: FC<AdminPageProps> = ({
           <option value="path">Path</option>
           <option value="subdomain">Subdomain</option>
         </select>
-        <input name="key" placeholder="/example or example" required />
+        <input
+          name="key"
+          placeholder="/example or mang or mang/rsvp"
+          required
+        />
         <input
           type="url"
           name="destination"
@@ -109,6 +113,11 @@ export const AdminPage: FC<AdminPageProps> = ({
         />
         <button type="submit">Add link</button>
       </form>
+      <small>
+        For subdomain, use <code>mang</code> for <code>mang.foss.gg</code> and{" "}
+        <code>mang/rsvp</code> for <code>mang.foss.gg/rsvp</code> — unknown
+        paths fall back to <code>mang</code>.
+      </small>
     </section>
     <section>
       <h2>Saved links</h2>

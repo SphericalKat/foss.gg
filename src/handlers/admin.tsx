@@ -72,6 +72,21 @@ const isPathKey = (value: string): boolean =>
 const normalizePathKey = (value: string): string =>
   value.startsWith("/") ? value : `/${value}`;
 
+const normalizeSubdomainKey = (value: string): string => {
+  const slashIndex = value.indexOf("/");
+  const label = (
+    slashIndex === -1 ? value : value.slice(0, slashIndex)
+  ).toLowerCase();
+  if (!isSubdomainKey(label)) {
+    return "";
+  }
+  if (slashIndex === -1) {
+    return label;
+  }
+  const path = normalizePathKey(value.slice(slashIndex));
+  return isPathKey(path) ? `${label}${path}` : "";
+};
+
 const readFormData = async (request: Request): Promise<FormData | null> => {
   try {
     return await request.formData();
@@ -98,8 +113,9 @@ const readLinkInput = async (
   }
   // SAFETY: The checks above narrow rawKind to "path" or "subdomain", the only Link["kind"] values.
   const kind = rawKind as Link["kind"];
-  const key = kind === "path" ? normalizePathKey(rawKey) : rawKey.toLowerCase();
-  if (!key || (kind === "path" ? !isPathKey(key) : !isSubdomainKey(key))) {
+  const key =
+    kind === "path" ? normalizePathKey(rawKey) : normalizeSubdomainKey(rawKey);
+  if (!key || (kind === "path" && !isPathKey(key))) {
     return { error: "Enter a valid short-link key" };
   }
   if (
