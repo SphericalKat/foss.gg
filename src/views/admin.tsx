@@ -37,10 +37,14 @@ interface AdminPageProps {
 }
 
 const LinkRow: FC<{ link: Link; session: Session }> = ({ link, session }) => (
-  <li>
+  <li class="link-row">
     {link.owner_username === session.username ? (
       <>
-        <form method="post" action={`/admin/links/${link.id}`}>
+        <form
+          method="post"
+          action={`/admin/links/${link.id}`}
+          class="link-edit"
+        >
           <select name="kind">
             <option value="path" selected={link.kind === "path"}>
               Path
@@ -58,20 +62,25 @@ const LinkRow: FC<{ link: Link; session: Session }> = ({ link, session }) => (
           />
           <button type="submit">Save</button>
         </form>
-        <form method="post" action={`/admin/links/${link.id}/delete`}>
+        <form
+          method="post"
+          action={`/admin/links/${link.id}/delete`}
+          class="link-delete"
+        >
           <button type="submit" class="danger">
             Delete
           </button>
         </form>
+        <small>Set by {link.owner_username}</small>
       </>
     ) : (
       <>
         <span>{link.kind}</span>
         <code>{link.key}</code>
         <a href={link.destination}>{link.destination}</a>
+        <small>Set by {link.owner_username}</small>
       </>
     )}
-    <small>Set by {link.owner_username}</small>
   </li>
 );
 
@@ -100,7 +109,11 @@ export const AdminPage: FC<AdminPageProps> = ({
           <option value="path">Path</option>
           <option value="subdomain">Subdomain</option>
         </select>
-        <input name="key" placeholder="/example or example" required />
+        <input
+          name="key"
+          placeholder="/example or example or example/tickets"
+          required
+        />
         <input
           type="url"
           name="destination"
@@ -109,6 +122,12 @@ export const AdminPage: FC<AdminPageProps> = ({
         />
         <button type="submit">Add link</button>
       </form>
+      <small>
+        For subdomain, use <code>example</code> for <code>example.foss.gg</code>{" "}
+        and <code>example/tickets</code> for{" "}
+        <code>example.foss.gg/tickets</code> — unknown paths fall back to{" "}
+        <code>example</code>.
+      </small>
     </section>
     <section>
       <h2>Saved links</h2>

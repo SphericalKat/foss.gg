@@ -72,6 +72,26 @@ const isPathKey = (value: string): boolean =>
 const normalizePathKey = (value: string): string =>
   value.startsWith("/") ? value : `/${value}`;
 
+const normalizeSubdomainKey = (value: string): string => {
+  const slashIndex = value.indexOf("/");
+  const label = (
+    slashIndex === -1 ? value : value.slice(0, slashIndex)
+  ).toLowerCase();
+  if (!isSubdomainKey(label)) {
+    return "";
+  }
+  if (slashIndex === -1) {
+    return label;
+  }
+  const rawPath = value.slice(slashIndex);
+  // Prevent storing unreachable `label/` -> `label` is the same as root, so normalize to parent.
+  if (rawPath === "/") {
+    return label;
+  }
+  const path = normalizePathKey(rawPath);
+  return isPathKey(path) ? `${label}${path}` : "";
+};
+
 const readFormData = async (request: Request): Promise<FormData | null> => {
   try {
     return await request.formData();
@@ -98,8 +118,9 @@ const readLinkInput = async (
   }
   // SAFETY: The checks above narrow rawKind to "path" or "subdomain", the only Link["kind"] values.
   const kind = rawKind as Link["kind"];
-  const key = kind === "path" ? normalizePathKey(rawKey) : rawKey.toLowerCase();
-  if (!key || (kind === "path" ? !isPathKey(key) : !isSubdomainKey(key))) {
+  const key =
+    kind === "path" ? normalizePathKey(rawKey) : normalizeSubdomainKey(rawKey);
+  if (!key || (kind === "path" && !isPathKey(key))) {
     return { error: "Enter a valid short-link key" };
   }
   if (
@@ -112,6 +133,30 @@ const readLinkInput = async (
     return { error: "Destination must be an absolute HTTP or HTTPS URL" };
   }
   return { destination, key, kind };
+};
+
+const ensureSubdomainParentExists = async (
+  db: D1Database,
+  key: string,
+  excludeId?: number
+): Promise<string | null> => {
+  const slashIndex = key.indexOf("/");
+  if (slashIndex === -1) {
+    return null;
+  }
+  const parent = key.slice(0, slashIndex);
+  const row = excludeId
+    ? await db
+        .prepare(
+          "SELECT 1 FROM links WHERE kind = ?1 AND key = ?2 AND id != ?3"
+        )
+        .bind("subdomain", parent, excludeId)
+        .first()
+    : await db
+        .prepare("SELECT 1 FROM links WHERE kind = ?1 AND key = ?2")
+        .bind("subdomain", parent)
+        .first();
+  return row ? null : `Create ${parent}.foss.gg first`;
 };
 
 const listPage = async (
@@ -161,6 +206,15 @@ const createLink = async (
   if ("error" in input) {
     return listPage(context, session, input.error, 400);
   }
+  if (input.kind === "subdomain") {
+    const parentError = await ensureSubdomainParentExists(
+      context.env.DB,
+      input.key
+    );
+    if (parentError) {
+      return listPage(context, session, parentError, 400);
+    }
+  }
 
   const now = new Date().toISOString();
   try {
@@ -189,6 +243,16 @@ const updateLink = async (
   const input = await readLinkInput(context.req.raw);
   if ("error" in input) {
     return listPage(context, session, input.error, 400);
+  }
+  if (input.kind === "subdomain") {
+    const parentError = await ensureSubdomainParentExists(
+      context.env.DB,
+      input.key,
+      id
+    );
+    if (parentError) {
+      return listPage(context, session, parentError, 400);
+    }
   }
 
   const now = new Date().toISOString();
