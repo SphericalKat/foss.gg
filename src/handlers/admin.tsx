@@ -130,6 +130,22 @@ const readLinkInput = async (
   return { destination, key, kind };
 };
 
+const ensureSubdomainParentExists = async (
+  db: D1Database,
+  key: string
+): Promise<string | null> => {
+  const slashIndex = key.indexOf("/");
+  if (slashIndex === -1) {
+    return null;
+  }
+  const parent = key.slice(0, slashIndex);
+  const row = await db
+    .prepare("SELECT 1 FROM links WHERE kind = ?1 AND key = ?2")
+    .bind("subdomain", parent)
+    .first();
+  return row ? null : `Create ${parent}.foss.gg first`;
+};
+
 const listPage = async (
   context: Context<AppBindings>,
   session: Session,
@@ -177,6 +193,15 @@ const createLink = async (
   if ("error" in input) {
     return listPage(context, session, input.error, 400);
   }
+  if (input.kind === "subdomain") {
+    const parentError = await ensureSubdomainParentExists(
+      context.env.DB,
+      input.key
+    );
+    if (parentError) {
+      return listPage(context, session, parentError, 400);
+    }
+  }
 
   const now = new Date().toISOString();
   try {
@@ -205,6 +230,15 @@ const updateLink = async (
   const input = await readLinkInput(context.req.raw);
   if ("error" in input) {
     return listPage(context, session, input.error, 400);
+  }
+  if (input.kind === "subdomain") {
+    const parentError = await ensureSubdomainParentExists(
+      context.env.DB,
+      input.key
+    );
+    if (parentError) {
+      return listPage(context, session, parentError, 400);
+    }
   }
 
   const now = new Date().toISOString();
