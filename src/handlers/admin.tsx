@@ -244,6 +244,19 @@ const createLink = async (
   }
 };
 
+const countChildPaths = async (
+  db: D1Database,
+  parent: string
+): Promise<number> => {
+  const row = await db
+    .prepare(
+      "SELECT COUNT(*) AS total FROM links WHERE kind = ?1 AND key LIKE ?2"
+    )
+    .bind("subdomain", `${parent}/%`)
+    .first<{ total: number }>();
+  return row?.total ?? 0;
+};
+
 const updateLink = async (
   context: Context<AppBindings>,
   session: Session,
@@ -252,6 +265,29 @@ const updateLink = async (
   const input = await readLinkInput(context.req.raw);
   if ("error" in input) {
     return listPage(context, session, input.error, 400);
+  }
+  const existing = await context.env.DB.prepare(
+    "SELECT kind, key FROM links WHERE id = ?1 AND owner_username = ?2"
+  )
+    .bind(id, session.username)
+    .first<{ kind: Link["kind"]; key: string }>();
+  if (!existing) {
+    return textResponse("Not found", 404);
+  }
+  const renamedParent =
+    existing.kind === "subdomain" &&
+    !existing.key.includes("/") &&
+    (input.kind !== "subdomain" || input.key !== existing.key);
+  if (
+    renamedParent &&
+    (await countChildPaths(context.env.DB, existing.key)) > 0
+  ) {
+    return listPage(
+      context,
+      session,
+      `Delete ${existing.key} paths first`,
+      400
+    );
   }
   if (input.kind === "subdomain") {
     const parentError = await ensureSubdomainParentExists(
@@ -295,16 +331,37 @@ const updateLink = async (
 };
 
 const deleteLink = async (
-  env: Env,
+  context: Context<AppBindings>,
   session: Session,
   id: number
 ): Promise<Response> => {
+  const existing = await context.env.DB.prepare(
+    "SELECT kind, key FROM links WHERE id = ?1 AND owner_username = ?2"
+  )
+    .bind(id, session.username)
+    .first<{ kind: Link["kind"]; key: string }>();
+  if (!existing) {
+    return textResponse("Not found", 404);
+  }
+  if (
+    existing.kind === "subdomain" &&
+    !existing.key.includes("/") &&
+    (await countChildPaths(context.env.DB, existing.key)) > 0
+  ) {
+    return listPage(
+      context,
+      session,
+      `Delete ${existing.key} paths first`,
+      400
+    );
+  }
+
   const now = new Date().toISOString();
-  const [, result] = await env.DB.batch([
-    env.DB.prepare(
+  const [, result] = await context.env.DB.batch([
+    context.env.DB.prepare(
       "INSERT INTO audit_log (actor_username, action, kind, key, destination, created_at) SELECT ?1, 'deleted', kind, key, destination, ?2 FROM links WHERE id = ?3 AND owner_username = ?1"
     ).bind(session.username, now, id),
-    env.DB.prepare(
+    context.env.DB.prepare(
       "DELETE FROM links WHERE id = ?1 AND owner_username = ?2"
     ).bind(id, session.username),
   ]);
@@ -422,7 +479,7 @@ adminRoutes.post("/links/:id{[0-9]+}", (context) => {
 adminRoutes.post("/links/:id{[0-9]+}/delete", (context) => {
   const session = context.get("session");
   return session
-    ? deleteLink(context.env, session, Number(context.req.param("id")))
+    ? deleteLink(context, session, Number(context.req.param("id")))
     : textResponse("Not found", 404);
 });
 

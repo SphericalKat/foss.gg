@@ -378,6 +378,55 @@ describe("foss.gg worker", () => {
     expect(converted.status).toBe(400);
   });
 
+  test("blocks deleting or renaming parent subdomains that have paths", async () => {
+    const cookie = await loginCookie("admin", password);
+    await form(
+      "/admin/links",
+      {
+        destination: "https://example.com/",
+        key: "keep",
+        kind: "subdomain",
+      },
+      cookie
+    );
+    await form(
+      "/admin/links",
+      {
+        destination: "https://example.com/shop",
+        key: "keep/shop",
+        kind: "subdomain",
+      },
+      cookie
+    );
+    const parentId = await linkId("keep");
+    const renaming = await form(
+      `/admin/links/${parentId}`,
+      {
+        destination: "https://example.com/",
+        key: "renamed",
+        kind: "subdomain",
+      },
+      cookie
+    );
+    expect(renaming.status).toBe(400);
+    const deleting = await form(`/admin/links/${parentId}/delete`, {}, cookie);
+    expect(deleting.status).toBe(400);
+
+    const childId = await linkId("keep/shop");
+    const childDeleted = await form(
+      `/admin/links/${childId}/delete`,
+      {},
+      cookie
+    );
+    expect(childDeleted.status).toBe(303);
+    const parentDeleted = await form(
+      `/admin/links/${parentId}/delete`,
+      {},
+      cookie
+    );
+    expect(parentDeleted.status).toBe(303);
+  });
+
   test("requires owning the parent subdomain for per-path links", async () => {
     const adminCookie = await loginCookie("admin", password);
     await form(
