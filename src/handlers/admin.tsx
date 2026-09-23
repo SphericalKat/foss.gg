@@ -78,7 +78,7 @@ const normalizeSubdomainKey = (value: string): string => {
   if (!path) {
     return label;
   }
-  const normalizedPath = normalizePathKey(path);
+  const normalizedPath = normalizePathKey(path).replace(/\/+$/u, "");
   return isPathKey(normalizedPath) ? `${label}${normalizedPath}` : "";
 };
 

@@ -337,6 +337,37 @@ describe("foss.gg worker", () => {
     );
   });
 
+  test("normalizes trailing slashes in subdomain path keys on write", async () => {
+    const cookie = await loginCookie("admin", password);
+    await form(
+      "/admin/links",
+      { destination: "https://example.org/", key: "go", kind: "subdomain" },
+      cookie
+    );
+    const created = await form(
+      "/admin/links",
+      {
+        destination: "https://example.com/rsvp",
+        key: "go/rsvp/",
+        kind: "subdomain",
+      },
+      cookie
+    );
+    expect(created.status).toBe(303);
+
+    const stored = await env.DB.prepare("SELECT key FROM links WHERE kind = ?1")
+      .bind("subdomain")
+      .all<{ key: string }>();
+    expect(stored.results.map(({ key }) => key)).toStrictEqual([
+      "go",
+      "go/rsvp",
+    ]);
+
+    const response = await request("/rsvp/", {}, "go.foss.gg");
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("https://example.com/rsvp");
+  });
+
   test("requires parent subdomain for per-path links", async () => {
     const cookie = await loginCookie("admin", password);
     const withoutParent = await form(
