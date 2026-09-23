@@ -1,10 +1,13 @@
 import type { Context } from "hono";
 
+import type { Link } from "../../domain/link";
 import type { Session } from "../../domain/session";
+import { splitSubdomainKey } from "../../domain/subdomain-key";
 import { loadAdminPage } from "../../services/admin";
 import { authenticate } from "../../services/authentication";
 import { addLink, editLink, removeLink } from "../../services/links";
 import { addUser } from "../../services/users";
+import type { ErrorContext, LinkDraft } from "../../views/admin";
 import adminScript from "../../views/admin.client.js";
 import type { AppBindings } from "../bindings";
 import { clearSessionCookie, createSessionCookie } from "../middleware/session";
@@ -24,19 +27,69 @@ export const serveAdminScript = (): Response =>
     },
   });
 
+interface ListPageOptions {
+  error?: string;
+  status?: 200 | 400 | 409;
+  draft?: LinkDraft;
+  errorContext?: ErrorContext;
+}
+
+const errorField = (message: string): "address" | "destination" | undefined => {
+  if (message === "Destination must be an absolute HTTP or HTTPS URL") {
+    return "destination";
+  }
+  if (
+    message === "Choose a valid link type" ||
+    message === "Enter a valid short-link key" ||
+    message === "The root and /admin routes are reserved" ||
+    message === "That short link already exists" ||
+    message.startsWith("Create ") ||
+    message.startsWith("You don't own ") ||
+    message.startsWith("Delete ")
+  ) {
+    return "address";
+  }
+  return undefined;
+};
+
+const ownedPrefillDomain = (
+  links: Link[],
+  requested: string | undefined,
+  username: string
+): string | undefined => {
+  if (!requested) {
+    return undefined;
+  }
+  return links.some(
+    (link) =>
+      link.kind === "subdomain" &&
+      link.owner_username === username &&
+      !splitSubdomainKey(link.key).path &&
+      splitSubdomainKey(link.key).label === requested.toLowerCase()
+  )
+    ? requested.toLowerCase()
+    : undefined;
+};
+
 const listPage = async (
   context: Context<AppBindings>,
   session: Session,
-  error?: string,
-  status: 200 | 400 | 409 = 200
+  options: ListPageOptions = {}
 ): Promise<Response> => {
   try {
     const data = await loadAdminPage(context.env.DB, session.isAdmin);
-    context.status(status);
+    context.status(options.status ?? 200);
     return renderAdminPage(context, {
       ...data,
-      error,
+      draft: options.draft,
+      error: options.error,
+      errorContext: options.errorContext,
       now: Date.now(),
+      prefillDomain: ownedPrefillDomain(
+        data.links,
+        context.req.query("domain"),
+        session.username
+      ),
       session,
     });
   } catch {
@@ -82,7 +135,11 @@ export const createLink = async (
   }
   const input = await readLinkRequest(context.req.raw);
   if ("error" in input) {
-    return listPage(context, session, input.error, 400);
+    return listPage(context, session, {
+      error: input.error,
+      errorContext: { operation: "create" },
+      status: 400,
+    });
   }
   const result = await addLink(context.env.DB, input, session.username);
   if (result.status === "ok") {
@@ -91,10 +148,26 @@ export const createLink = async (
     );
   }
   if (result.status === "conflict") {
-    return listPage(context, session, result.message, 409);
+    return listPage(context, session, {
+      draft: input,
+      error: result.message,
+      errorContext: {
+        field: errorField(result.message),
+        operation: "create",
+      },
+      status: 409,
+    });
   }
   if (result.status === "invalid") {
-    return listPage(context, session, result.message, 400);
+    return listPage(context, session, {
+      draft: input,
+      error: result.message,
+      errorContext: {
+        field: errorField(result.message),
+        operation: "create",
+      },
+      status: 400,
+    });
   }
   return textResponse("Internal server error", 500);
 };
@@ -108,7 +181,14 @@ export const updateLink = async (
   }
   const input = await readLinkRequest(context.req.raw);
   if ("error" in input) {
-    return listPage(context, session, input.error, 400);
+    return listPage(context, session, {
+      error: input.error,
+      errorContext: {
+        linkId: Number(context.req.param("id")),
+        operation: "edit",
+      },
+      status: 400,
+    });
   }
   const id = Number(context.req.param("id"));
   const result = await editLink(context.env.DB, input, session.username, id);
@@ -116,10 +196,28 @@ export const updateLink = async (
     return redirectResponse(`/admin?saved=${id}`);
   }
   if (result.status === "conflict") {
-    return listPage(context, session, result.message, 409);
+    return listPage(context, session, {
+      draft: input,
+      error: result.message,
+      errorContext: {
+        field: errorField(result.message),
+        linkId: id,
+        operation: "edit",
+      },
+      status: 409,
+    });
   }
   if (result.status === "invalid") {
-    return listPage(context, session, result.message, 400);
+    return listPage(context, session, {
+      draft: input,
+      error: result.message,
+      errorContext: {
+        field: errorField(result.message),
+        linkId: id,
+        operation: "edit",
+      },
+      status: 400,
+    });
   }
   return result.status === "missing"
     ? textResponse("Not found", 404)
@@ -144,7 +242,10 @@ export const deleteLink = async (
   if (result.status === "missing") {
     return textResponse("Not found", 404);
   }
-  return listPage(context, session, result.message, 400);
+  return listPage(context, session, {
+    error: result.message,
+    status: 400,
+  });
 };
 
 export const createUser = async (
@@ -156,7 +257,10 @@ export const createUser = async (
   }
   const form = await readFormData(context.req.raw);
   if (!form) {
-    return listPage(context, session, "Invalid form data", 400);
+    return listPage(context, session, {
+      error: "Invalid form data",
+      status: 400,
+    });
   }
   const { password, username } = readCredentials(form);
   const result = await addUser(context.env.DB, username, password);
@@ -166,10 +270,10 @@ export const createUser = async (
     );
   }
   if (result.status === "invalid") {
-    return listPage(context, session, result.message, 400);
+    return listPage(context, session, { error: result.message, status: 400 });
   }
   if (result.status === "conflict") {
-    return listPage(context, session, result.message, 409);
+    return listPage(context, session, { error: result.message, status: 409 });
   }
   return textResponse("Internal server error", 500);
 };

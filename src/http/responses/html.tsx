@@ -4,7 +4,7 @@ import type { AuditEntry, Link } from "../../domain/link";
 import type { Session } from "../../domain/session";
 import type { UserSummary } from "../../domain/user";
 import { AdminPage } from "../../views/admin";
-import type { Notice } from "../../views/admin";
+import type { ErrorContext, LinkDraft, Notice } from "../../views/admin";
 import { shortUrl } from "../../views/format";
 import { LandingPage } from "../../views/landing";
 import { LoginPage } from "../../views/login";
@@ -29,7 +29,17 @@ const noticeFromQuery = (
     (link) => link.kind === query.kind && link.key === query.created
   );
   if (created) {
-    return { code: shortUrl(created.kind, created.key), text: "Created" };
+    const parent = created.kind === "subdomain" && !created.key.includes("/");
+    return {
+      action: parent
+        ? {
+            href: `/admin?domain=${encodeURIComponent(created.key)}#new-link`,
+            text: `Add a path to ${shortUrl(created.kind, created.key)}`,
+          }
+        : undefined,
+      code: shortUrl(created.kind, created.key),
+      text: "Created",
+    };
   }
   const saved = links.find((link) => String(link.id) === query.saved);
   if (saved) {
@@ -51,6 +61,9 @@ export const renderAdminPage = (
     session: Session;
     now: number;
     error?: string;
+    errorContext?: ErrorContext;
+    draft?: LinkDraft;
+    prefillDomain?: string;
   }
 ): Response | Promise<Response> =>
   context.render(
@@ -61,6 +74,9 @@ export const renderAdminPage = (
       session={data.session}
       now={data.now}
       error={data.error}
+      errorContext={data.errorContext}
+      draft={data.draft}
+      prefillDomain={data.prefillDomain}
       notice={
         data.error
           ? undefined

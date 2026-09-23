@@ -7,6 +7,8 @@ It supports two link formats:
 - `foss.gg/example`
 - `example.foss.gg`
 
+Subdomains can also have child links, such as `example.foss.gg/tickets`. Create the subdomain first, then add its child paths. The child and its parent must have the same owner. Unknown paths under a subdomain use the parent's default destination. The parent cannot be renamed or deleted while it has child paths.
+
 Manage links at [foss.gg/admin](https://foss.gg/admin). Log in as `admin` with the configured admin password.
 
 The admin can add users and set their passwords. Each account can edit or delete only its own links. The admin page shows the latest link activity.
@@ -71,6 +73,8 @@ The Worker routes require these proxied Cloudflare DNS records:
 
 ## Link behavior
 
-Known links return a temporary `302` redirect. Unknown links return `404`.
+Known links return a temporary `302` redirect. Unknown links return `404`, except unknown paths under an existing subdomain use that subdomain's default destination.
 
 The Worker uses the saved destination exactly. It does not append the source path or query string.
+
+The admin link list groups apex paths and each subdomain with its child paths. Each group uses an expandable accordion that is open by default.
