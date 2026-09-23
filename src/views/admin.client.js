@@ -80,14 +80,16 @@ const setupFilter = (list) => {
     noMatch.hidden = shown > 0 || rows.length === 0;
   };
 
+  const selectScope = (button) => {
+    ({ scope } = button.dataset);
+    for (const other of scopeButtons) {
+      other.setAttribute("aria-pressed", String(other === button));
+    }
+    apply();
+  };
+
   for (const button of scopeButtons) {
-    button.addEventListener("click", () => {
-      scope = button.dataset.scope;
-      for (const other of scopeButtons) {
-        other.setAttribute("aria-pressed", String(other === button));
-      }
-      apply();
-    });
+    button.addEventListener("click", () => selectScope(button));
   }
   search.addEventListener("input", apply);
   tools.hidden = false;
@@ -106,7 +108,9 @@ const copyLink = async (button) => {
 };
 
 const toggleEdit = (button) => {
-  const form = document.getElementById(button.getAttribute("aria-controls"));
+  const form = document.querySelector(
+    `#${button.getAttribute("aria-controls")}`
+  );
   if (!form) {
     return;
   }
@@ -138,7 +142,9 @@ const setupLinks = () => {
     button.hidden = false;
   }
   for (const button of list.querySelectorAll("[data-edit]")) {
-    const form = document.getElementById(button.getAttribute("aria-controls"));
+    const form = document.querySelector(
+      `#${button.getAttribute("aria-controls")}`
+    );
     if (form) {
       form.hidden = true;
       button.hidden = false;
@@ -149,7 +155,7 @@ const setupLinks = () => {
     const button = event.target.closest("button");
     if (button?.dataset.copy) {
       copyLink(button);
-    } else if (button?.hasAttribute("data-edit")) {
+    } else if (button?.dataset.edit !== undefined) {
       toggleEdit(button);
     }
   });

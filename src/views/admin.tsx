@@ -102,11 +102,11 @@ const LinkRow: FC<{ link: Link; session: Session }> = ({ link, session }) => {
           action={`/admin/links/${link.id}`}
           class="edit"
         >
-          <label class="sr-only" for={`${editId}-kind`}>
+          <label class="sr-only" htmlFor={`${editId}-kind`}>
             Type
           </label>
           <KindSelect id={`${editId}-kind`} selected={link.kind} />
-          <label class="sr-only" for={`${editId}-key`}>
+          <label class="sr-only" htmlFor={`${editId}-key`}>
             Short link
           </label>
           <input
@@ -116,7 +116,7 @@ const LinkRow: FC<{ link: Link; session: Session }> = ({ link, session }) => {
             value={link.key}
             required
           />
-          <label class="sr-only" for={`${editId}-destination`}>
+          <label class="sr-only" htmlFor={`${editId}-destination`}>
             Destination URL
           </label>
           <input
@@ -143,11 +143,11 @@ const NewLinkSection: FC = () => (
     <h2 id="new-link-heading">New link</h2>
     <form method="post" action="/admin/links" class="new-link">
       <div class="new-row">
-        <label class="sr-only" for="new-kind">
+        <label class="sr-only" htmlFor="new-kind">
           Type
         </label>
         <KindSelect id="new-kind" />
-        <label class="sr-only" for="new-key">
+        <label class="sr-only" htmlFor="new-key">
           Short link
         </label>
         <div class="prefixed">
@@ -163,7 +163,7 @@ const NewLinkSection: FC = () => (
             .foss.gg
           </span>
         </div>
-        <label class="sr-only" for="new-destination">
+        <label class="sr-only" htmlFor="new-destination">
           Destination URL
         </label>
         <input
@@ -206,7 +206,7 @@ const LinksSection: FC<{ links: Link[]; session: Session }> = ({
         <button type="button" data-scope="mine" aria-pressed="false">
           Mine
         </button>
-        <label class="sr-only" for="link-search">
+        <label class="sr-only" htmlFor="link-search">
           Search links
         </label>
         <input
@@ -280,7 +280,7 @@ const UsersSection: FC<{ users: UserSummary[]; now: number }> = ({
       )}
     </ul>
     <form method="post" action="/admin/users" class="add-user">
-      <label class="sr-only" for="new-username">
+      <label class="sr-only" htmlFor="new-username">
         Username
       </label>
       <input
@@ -292,7 +292,7 @@ const UsersSection: FC<{ users: UserSummary[]; now: number }> = ({
         maxlength={32}
         required
       />
-      <label class="sr-only" for="new-password">
+      <label class="sr-only" htmlFor="new-password">
         Password
       </label>
       <input
@@ -331,7 +331,7 @@ export const AdminPage: FC<AdminPageProps> = ({
         </p>
       )}
       {notice && (
-        <p class="notice" role="status">
+        <output class="notice">
           <span class="ok" aria-hidden="true">
             ✓
           </span>
@@ -341,7 +341,7 @@ export const AdminPage: FC<AdminPageProps> = ({
           <a class="link-btn" href="/admin">
             Dismiss
           </a>
-        </p>
+        </output>
       )}
       <NewLinkSection />
       <LinksSection links={links} session={session} />

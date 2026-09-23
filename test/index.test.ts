@@ -5,6 +5,49 @@ import worker from "../src/index";
 
 const password = "test-password";
 
+const request = (
+  path: string,
+  init: RequestInit = {},
+  host = "foss.gg"
+): Promise<Response> =>
+  worker.fetch(new Request(`https://${host}${path}`, init), {
+    ADMIN_PASSWORD: password,
+    DB: env.DB,
+  });
+
+const form = (
+  path: string,
+  values: Record<string, string>,
+  cookie?: string
+): Promise<Response> => {
+  const headers = new Headers({
+    "Content-Type": "application/x-www-form-urlencoded",
+  });
+  if (cookie) {
+    headers.set("Cookie", cookie);
+  }
+  return request(path, {
+    body: new URLSearchParams(values),
+    headers,
+    method: "POST",
+  });
+};
+
+const loginCookie = async (
+  username: string,
+  loginPassword: string
+): Promise<string> => {
+  const login = await form("/admin/login", {
+    password: loginPassword,
+    username,
+  });
+  const cookie = login.headers.get("set-cookie")?.split(";")[0];
+  if (!cookie) {
+    throw new Error("Login did not set a session cookie");
+  }
+  return cookie;
+};
+
 const linkId = async (key: string): Promise<number> => {
   const row = await env.DB.prepare("SELECT id FROM links WHERE key = ?1")
     .bind(key)
@@ -16,49 +59,6 @@ const linkId = async (key: string): Promise<number> => {
 };
 
 describe("foss.gg worker", () => {
-  const request = (
-    path: string,
-    init: RequestInit = {},
-    host = "foss.gg"
-  ): Promise<Response> =>
-    worker.fetch(new Request(`https://${host}${path}`, init), {
-      ADMIN_PASSWORD: password,
-      DB: env.DB,
-    });
-
-  const form = (
-    path: string,
-    values: Record<string, string>,
-    cookie?: string
-  ): Promise<Response> => {
-    const headers = new Headers({
-      "Content-Type": "application/x-www-form-urlencoded",
-    });
-    if (cookie) {
-      headers.set("Cookie", cookie);
-    }
-    return request(path, {
-      body: new URLSearchParams(values),
-      headers,
-      method: "POST",
-    });
-  };
-
-  const loginCookie = async (
-    username: string,
-    loginPassword: string
-  ): Promise<string> => {
-    const login = await form("/admin/login", {
-      password: loginPassword,
-      username,
-    });
-    const cookie = login.headers.get("set-cookie")?.split(";")[0];
-    if (!cookie) {
-      throw new Error("Login did not set a session cookie");
-    }
-    return cookie;
-  };
-
   beforeEach(async () => {
     await env.DB.exec("DELETE FROM audit_log");
     await env.DB.exec("DELETE FROM links");
