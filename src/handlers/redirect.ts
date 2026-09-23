@@ -36,31 +36,17 @@ const getLookup = (
     : { fallbackKey: null, key: label, kind: "subdomain" };
 };
 
-const getEffectiveHostname = (request: Request): string => {
-  // Use the canonical Host header when it is a trusted foss.gg host;
-  // otherwise fall back to the URL hostname. Do not trust x-host or query params.
-  const urlHostname = normalizeHostname(new URL(request.url).hostname);
-  const hostHeader = request.headers.get("host");
-  if (hostHeader) {
-    const headerHostname = normalizeHostname(hostHeader.split(":")[0] ?? "");
-    if (
-      headerHostname === APEX_HOST ||
-      headerHostname.endsWith(`.${APEX_HOST}`)
-    ) {
-      return headerHostname;
-    }
-  }
-  return urlHostname;
-};
+const getRequestHostname = (request: Request): string =>
+  normalizeHostname(new URL(request.url).hostname);
 
 export const isApexRequest = (request: Request): boolean =>
-  getEffectiveHostname(request) === APEX_HOST;
+  getRequestHostname(request) === APEX_HOST;
 
 export const handleRedirect = async (
   context: Context<AppBindings>
 ): Promise<Response> => {
   const url = new URL(context.req.url);
-  const lookup = getLookup(getEffectiveHostname(context.req.raw), url.pathname);
+  const lookup = getLookup(getRequestHostname(context.req.raw), url.pathname);
   if (!lookup) {
     return context.text("Not found", 404);
   }
