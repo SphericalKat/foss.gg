@@ -11,32 +11,33 @@ interface AdminPageProps {
   error?: string;
 }
 
-const LinkRow: FC<{ link: Link; session: Session }> = ({ link, session }) => (
-  <li class="link-row">
-    {link.owner_username === session.username ? (
-      <>
-        <form
-          method="post"
-          action={`/admin/links/${link.id}`}
-          class="link-edit"
-        >
-          <select name="kind">
-            <option value="path" selected={link.kind === "path"}>
-              Path
-            </option>
-            <option value="subdomain" selected={link.kind === "subdomain"}>
-              Subdomain
-            </option>
-          </select>
-          <input name="key" value={link.key} required />
-          <input
-            type="url"
-            name="destination"
-            value={link.destination}
-            required
-          />
-          <button type="submit">Save</button>
-        </form>
+const LinkRow: FC<{ link: Link; session: Session }> = ({ link, session }) => {
+  const editable = link.owner_username === session.username;
+
+  return (
+    <li class="link-row">
+      <form method="post" action={`/admin/links/${link.id}`} class="link-edit">
+        <select name="kind" disabled={!editable}>
+          <option value="path" selected={link.kind === "path"}>
+            Path
+          </option>
+          <option value="subdomain" selected={link.kind === "subdomain"}>
+            Subdomain
+          </option>
+        </select>
+        <input name="key" value={link.key} required disabled={!editable} />
+        <input
+          type="url"
+          name="destination"
+          value={link.destination}
+          required
+          disabled={!editable}
+        />
+        <button type="submit" disabled={!editable}>
+          Save
+        </button>
+      </form>
+      {editable && (
         <form
           method="post"
           action={`/admin/links/${link.id}/delete`}
@@ -46,17 +47,11 @@ const LinkRow: FC<{ link: Link; session: Session }> = ({ link, session }) => (
             Delete
           </button>
         </form>
-      </>
-    ) : (
-      <>
-        <span>{link.kind}</span>
-        <code>{link.key}</code>
-        <a href={link.destination}>{link.destination}</a>
-      </>
-    )}
-    <small>Set by {link.owner_username}</small>
-  </li>
-);
+      )}
+      <small>Set by {link.owner_username}</small>
+    </li>
+  );
+};
 
 export const AdminPage: FC<AdminPageProps> = ({
   links,
