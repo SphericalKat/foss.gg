@@ -71,16 +71,15 @@ const LinkRow: FC<{ link: Link; session: Session }> = ({ link, session }) => (
             Delete
           </button>
         </form>
-        <small>Set by {link.owner_username}</small>
       </>
     ) : (
       <>
         <span>{link.kind}</span>
         <code>{link.key}</code>
         <a href={link.destination}>{link.destination}</a>
-        <small>Set by {link.owner_username}</small>
       </>
     )}
+    <small>Set by {link.owner_username}</small>
   </li>
 );
 
