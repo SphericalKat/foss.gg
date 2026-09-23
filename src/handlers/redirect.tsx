@@ -5,6 +5,7 @@ import { findLink } from "../models/links";
 import { APEX_HOST, getRequestHostname } from "../request-host";
 import { isSubdomainLabel, splitSubdomainKey } from "../subdomain-key";
 import type { LinkKind } from "../types";
+import { NotFoundPage } from "../views/not-found";
 
 const getLookup = (
   hostname: string,
@@ -32,7 +33,8 @@ export const handleRedirect = async (
   context: Context<AppBindings>
 ): Promise<Response> => {
   const url = new URL(context.req.url);
-  const lookup = getLookup(getRequestHostname(context.req.raw), url.pathname);
+  const hostname = getRequestHostname(context.req.raw);
+  const lookup = getLookup(hostname, url.pathname);
   if (!lookup) {
     return context.text("Not found", 404);
   }
@@ -44,12 +46,16 @@ export const handleRedirect = async (
         ? await findLink(context.env.DB, lookup.kind, lookup.fallbackKey)
         : null);
 
-    return link
-      ? new Response(null, {
-          headers: { Location: link.destination },
-          status: 302,
-        })
-      : context.text("Not found", 404);
+    if (link) {
+      return new Response(null, {
+        headers: { Location: link.destination },
+        status: 302,
+      });
+    }
+    context.status(404);
+    return context.render(
+      <NotFoundPage requested={`${hostname}${url.pathname}`} />
+    );
   } catch {
     return context.text("Internal server error", 500);
   }

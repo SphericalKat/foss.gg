@@ -10,6 +10,7 @@ import {
 } from "../models/links";
 import { addUser, authenticate } from "../models/users";
 import type { LinkInput, Session } from "../types";
+import adminScript from "../views/admin.client.js";
 import { listPage, renderLogin } from "./admin-responses";
 import {
   clearSessionCookie,
@@ -65,7 +66,9 @@ const createLink = async (
   }
   const result = await addLink(context.env.DB, input, session.username);
   if (result.status === "ok") {
-    return redirectResponse("/admin");
+    return redirectResponse(
+      `/admin?${new URLSearchParams({ created: input.key, kind: input.kind })}`
+    );
   }
   if (result.status === "conflict") {
     return listPage(context, session, result.message, 409);
@@ -87,7 +90,7 @@ const updateLink = async (
   }
   const result = await editLink(context.env.DB, input, session.username, id);
   if (result.status === "ok") {
-    return redirectResponse("/admin");
+    return redirectResponse(`/admin?saved=${id}`);
   }
   if (result.status === "conflict") {
     return listPage(context, session, result.message, 409);
@@ -107,7 +110,7 @@ const deleteLink = async (
 ): Promise<Response> => {
   const result = await removeLink(context.env.DB, session.username, id);
   if (result.status === "ok") {
-    return redirectResponse("/admin");
+    return redirectResponse("/admin?deleted=1");
   }
   if (result.status === "missing") {
     return textResponse("Not found", 404);
@@ -129,7 +132,9 @@ const createUser = async (
   const password = String(form.get("password") ?? "");
   const result = await addUser(context.env.DB, username, password);
   if (result.status === "ok") {
-    return redirectResponse("/admin");
+    return redirectResponse(
+      `/admin?${new URLSearchParams({ user: username })}`
+    );
   }
   if (result.status === "invalid") {
     return listPage(context, session, result.message, 400);
@@ -141,6 +146,17 @@ const createUser = async (
 };
 
 export const adminRoutes = new Hono<AppBindings>();
+
+adminRoutes.get(
+  "/admin.js",
+  () =>
+    new Response(adminScript, {
+      headers: {
+        "Cache-Control": "no-cache",
+        "Content-Type": "text/javascript; charset=UTF-8",
+      },
+    })
+);
 
 adminRoutes.use("*", loadSession);
 
