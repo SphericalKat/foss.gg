@@ -9,6 +9,7 @@ import {
   loadSession,
 } from "../session";
 import type { AppBindings, Session } from "../session";
+import { isSubdomainLabel, splitSubdomainKey } from "../subdomain-key";
 import { AdminPage } from "../views/admin";
 import type { AuditEntry, Link, UserSummary } from "../views/admin";
 import { LoginPage } from "../views/login";
@@ -60,9 +61,6 @@ const isDestination = (value: string): boolean => {
   }
 };
 
-const isSubdomainKey = (value: string): boolean =>
-  value.length <= 63 && /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u.test(value);
-
 const isPathKey = (value: string): boolean =>
   value.length <= 2048 &&
   /^\/[\S]*$/u.test(value) &&
@@ -73,23 +71,15 @@ const normalizePathKey = (value: string): string =>
   value.startsWith("/") ? value : `/${value}`;
 
 const normalizeSubdomainKey = (value: string): string => {
-  const slashIndex = value.indexOf("/");
-  const label = (
-    slashIndex === -1 ? value : value.slice(0, slashIndex)
-  ).toLowerCase();
-  if (!isSubdomainKey(label)) {
+  const { label, path } = splitSubdomainKey(value);
+  if (!isSubdomainLabel(label)) {
     return "";
   }
-  if (slashIndex === -1) {
+  if (!path) {
     return label;
   }
-  const rawPath = value.slice(slashIndex);
-  // Prevent storing unreachable `label/` -> `label` is the same as root, so normalize to parent.
-  if (rawPath === "/") {
-    return label;
-  }
-  const path = normalizePathKey(rawPath);
-  return isPathKey(path) ? `${label}${path}` : "";
+  const normalizedPath = normalizePathKey(path);
+  return isPathKey(normalizedPath) ? `${label}${normalizedPath}` : "";
 };
 
 const readFormData = async (request: Request): Promise<FormData | null> => {
@@ -141,11 +131,10 @@ const ensureSubdomainParentExists = async (
   username: string,
   excludeId?: number
 ): Promise<string | null> => {
-  const slashIndex = key.indexOf("/");
-  if (slashIndex === -1) {
+  const { label: parent, path } = splitSubdomainKey(key);
+  if (!path) {
     return null;
   }
-  const parent = key.slice(0, slashIndex);
   const row = excludeId
     ? await db
         .prepare(

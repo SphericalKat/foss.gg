@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 
 import type { AppBindings } from "../session";
+import { isSubdomainLabel, splitSubdomainKey } from "../subdomain-key";
 
 const APEX_HOST = "foss.gg";
 
@@ -12,9 +13,6 @@ interface Link {
 
 const normalizeHostname = (hostname: string): string =>
   hostname.toLowerCase().replace(/\.$/u, "");
-
-const isSubdomainKey = (value: string): boolean =>
-  value.length <= 63 && /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u.test(value);
 
 const getLookup = (
   hostname: string,
@@ -28,13 +26,13 @@ const getLookup = (
   }
 
   const label = hostname.slice(0, -APEX_HOST.length - 1);
-  if (!label || label.includes(".") || !isSubdomainKey(label)) {
+  if (!label || label.includes(".") || !isSubdomainLabel(label)) {
     return null;
   }
-  if (pathname === "/") {
-    return { fallbackKey: null, key: label, kind: "subdomain" };
-  }
-  return { fallbackKey: label, key: `${label}${pathname}`, kind: "subdomain" };
+  const { path } = splitSubdomainKey(`${label}${pathname}`);
+  return path
+    ? { fallbackKey: label, key: `${label}${path}`, kind: "subdomain" }
+    : { fallbackKey: null, key: label, kind: "subdomain" };
 };
 
 const getEffectiveHostname = (request: Request): string => {
