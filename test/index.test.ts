@@ -313,6 +313,30 @@ describe("foss.gg worker", () => {
     );
   });
 
+  test("matches subdomain paths with a trailing slash", async () => {
+    const cookie = await loginCookie("admin", password);
+    await form(
+      "/admin/links",
+      { destination: "https://example.org/", key: "go", kind: "subdomain" },
+      cookie
+    );
+    await form(
+      "/admin/links",
+      {
+        destination: "https://example.com/rsvp",
+        key: "go/rsvp",
+        kind: "subdomain",
+      },
+      cookie
+    );
+
+    const trailingSlash = await request("/rsvp/", {}, "go.foss.gg");
+    expect(trailingSlash.status).toBe(302);
+    expect(trailingSlash.headers.get("location")).toBe(
+      "https://example.com/rsvp"
+    );
+  });
+
   test("requires parent subdomain for per-path links", async () => {
     const cookie = await loginCookie("admin", password);
     const withoutParent = await form(

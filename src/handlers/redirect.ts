@@ -29,7 +29,8 @@ const getLookup = (
   if (!label || label.includes(".") || !isSubdomainLabel(label)) {
     return null;
   }
-  const { path } = splitSubdomainKey(`${label}${pathname}`);
+  const trimmedPathname = pathname.replace(/\/+$/u, "");
+  const { path } = splitSubdomainKey(`${label}${trimmedPathname}`);
   return path
     ? { fallbackKey: label, key: `${label}${path}`, kind: "subdomain" }
     : { fallbackKey: null, key: label, kind: "subdomain" };
