@@ -1,6 +1,6 @@
-import { APEX_HOST } from "../request-host";
-import { splitSubdomainKey } from "../subdomain-key";
-import type { LinkKind } from "../types";
+import { APEX_HOST } from "../config/site";
+import type { LinkKind } from "../domain/link";
+import { splitSubdomainKey } from "../domain/subdomain-key";
 
 const MINUTE_MS = 60_000;
 const MINUTES_PER_HOUR = 60;

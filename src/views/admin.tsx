@@ -1,6 +1,8 @@
 import type { FC } from "hono/jsx";
 
-import type { AuditEntry, Link, Session, UserSummary } from "../types";
+import type { AuditEntry, Link } from "../domain/link";
+import type { Session } from "../domain/session";
+import type { UserSummary } from "../domain/user";
 import { shortUrl, timeAgo, withoutScheme } from "./format";
 import { PageLayout } from "./layout";
 

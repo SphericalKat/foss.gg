@@ -1,6 +1,6 @@
 import type { FC } from "hono/jsx";
 
-import { APEX_HOST } from "../request-host";
+import { APEX_HOST } from "../config/site";
 import { PageLayout } from "./layout";
 
 export const NotFoundPage: FC<{ requested: string }> = ({ requested }) => (

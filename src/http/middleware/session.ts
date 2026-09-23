@@ -1,7 +1,9 @@
 import type { MiddlewareHandler } from "hono";
 
+import { SESSION_TTL_SECONDS } from "../../domain/session";
+import { getSession } from "../../services/authentication";
 import type { AppBindings } from "../bindings";
-import { getSession, SESSION_TTL_SECONDS } from "../models/users";
+import { renderLogin } from "../responses/html";
 
 const SESSION_COOKIE = "foss_admin_session";
 
@@ -27,5 +29,15 @@ export const loadSession: MiddlewareHandler<AppBindings> = async (
       ? await getSession(token, context.env.DB, context.env.ADMIN_PASSWORD)
       : null
   );
+  return await next();
+};
+
+export const requireSession: MiddlewareHandler<AppBindings> = async (
+  context,
+  next
+) => {
+  if (!context.get("session")) {
+    return renderLogin(context);
+  }
   return await next();
 };

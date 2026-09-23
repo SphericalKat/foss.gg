@@ -1,8 +1,8 @@
 import { raw } from "hono/html";
 import type { FC, PropsWithChildren } from "hono/jsx";
 
-import { APEX_HOST } from "../request-host";
-import type { Session } from "../types";
+import { APEX_HOST } from "../config/site";
+import type { Session } from "../domain/session";
 
 import adminStyles from "./admin.css";
 
