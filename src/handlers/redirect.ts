@@ -1,18 +1,10 @@
 import type { Context } from "hono";
 
-import type { AppBindings } from "../session";
+import type { AppBindings } from "../bindings";
+import { findLink } from "../models/links";
+import { APEX_HOST, getRequestHostname } from "../request-host";
 import { isSubdomainLabel, splitSubdomainKey } from "../subdomain-key";
-
-const APEX_HOST = "foss.gg";
-
-type LinkKind = "path" | "subdomain";
-
-interface Link {
-  destination: string;
-}
-
-const normalizeHostname = (hostname: string): string =>
-  hostname.toLowerCase().replace(/\.$/u, "");
+import type { LinkKind } from "../types";
 
 const getLookup = (
   hostname: string,
@@ -36,12 +28,6 @@ const getLookup = (
     : { fallbackKey: null, key: label, kind: "subdomain" };
 };
 
-const getRequestHostname = (request: Request): string =>
-  normalizeHostname(new URL(request.url).hostname);
-
-export const isApexRequest = (request: Request): boolean =>
-  getRequestHostname(request) === APEX_HOST;
-
 export const handleRedirect = async (
   context: Context<AppBindings>
 ): Promise<Response> => {
@@ -51,17 +37,12 @@ export const handleRedirect = async (
     return context.text("Not found", 404);
   }
 
-  const findLink = (key: string): Promise<Link | null> =>
-    context.env.DB.prepare(
-      "SELECT destination FROM links WHERE kind = ?1 AND key = ?2"
-    )
-      .bind(lookup.kind, key)
-      .first<Link>();
-
   try {
     const link =
-      (await findLink(lookup.key)) ??
-      (lookup.fallbackKey ? await findLink(lookup.fallbackKey) : null);
+      (await findLink(context.env.DB, lookup.kind, lookup.key)) ??
+      (lookup.fallbackKey
+        ? await findLink(context.env.DB, lookup.kind, lookup.fallbackKey)
+        : null);
 
     return link
       ? new Response(null, {

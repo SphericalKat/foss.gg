@@ -1,9 +1,10 @@
 import { Hono } from "hono";
 import { jsxRenderer } from "hono/jsx-renderer";
 
+import type { AppBindings } from "./bindings";
 import { adminRoutes } from "./handlers/admin";
-import { handleRedirect, isApexRequest } from "./handlers/redirect";
-import type { AppBindings } from "./session";
+import { handleRedirect } from "./handlers/redirect";
+import { isApexRequest } from "./request-host";
 import { LandingPage } from "./views/landing";
 
 const app = new Hono<AppBindings>();

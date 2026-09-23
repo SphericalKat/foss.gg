@@ -1,32 +1,7 @@
 import type { FC } from "hono/jsx";
 
-import type { Session } from "../session";
+import type { AuditEntry, Link, Session, UserSummary } from "../types";
 import { AdminLayout } from "./layout";
-
-export interface Link {
-  id: number;
-  kind: "path" | "subdomain";
-  key: string;
-  destination: string;
-  owner_username: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface AuditEntry {
-  id: number;
-  actor_username: string;
-  action: "created" | "updated" | "deleted";
-  kind: Link["kind"];
-  key: string;
-  destination: string;
-  created_at: string;
-}
-
-export interface UserSummary {
-  username: string;
-  created_at: string;
-}
 
 interface AdminPageProps {
   links: Link[];
