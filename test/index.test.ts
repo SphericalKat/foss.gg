@@ -283,6 +283,258 @@ describe("foss.gg worker", () => {
     expect(takeover.status).toBe(404);
   });
 
+  test("supports per-path subdomain links with fallback to apex subdomain", async () => {
+    const cookie = await loginCookie("admin", password);
+    await form(
+      "/admin/links",
+      { destination: "https://example.org/", key: "go", kind: "subdomain" },
+      cookie
+    );
+    await form(
+      "/admin/links",
+      {
+        destination: "https://example.com/rsvp",
+        key: "go/rsvp",
+        kind: "subdomain",
+      },
+      cookie
+    );
+
+    const rsvpResponse = await request("/rsvp", {}, "go.foss.gg");
+    expect(rsvpResponse.status).toBe(302);
+    expect(rsvpResponse.headers.get("location")).toBe(
+      "https://example.com/rsvp"
+    );
+
+    const fallbackResponse = await request("/anything", {}, "go.foss.gg");
+    expect(fallbackResponse.status).toBe(302);
+    expect(fallbackResponse.headers.get("location")).toBe(
+      "https://example.org/"
+    );
+  });
+
+  test("matches subdomain paths with a trailing slash", async () => {
+    const cookie = await loginCookie("admin", password);
+    await form(
+      "/admin/links",
+      { destination: "https://example.org/", key: "go", kind: "subdomain" },
+      cookie
+    );
+    await form(
+      "/admin/links",
+      {
+        destination: "https://example.com/rsvp",
+        key: "go/rsvp",
+        kind: "subdomain",
+      },
+      cookie
+    );
+
+    const trailingSlash = await request("/rsvp/", {}, "go.foss.gg");
+    expect(trailingSlash.status).toBe(302);
+    expect(trailingSlash.headers.get("location")).toBe(
+      "https://example.com/rsvp"
+    );
+  });
+
+  test("normalizes trailing slashes in subdomain path keys on write", async () => {
+    const cookie = await loginCookie("admin", password);
+    await form(
+      "/admin/links",
+      { destination: "https://example.org/", key: "go", kind: "subdomain" },
+      cookie
+    );
+    const created = await form(
+      "/admin/links",
+      {
+        destination: "https://example.com/rsvp",
+        key: "go/rsvp/",
+        kind: "subdomain",
+      },
+      cookie
+    );
+    expect(created.status).toBe(303);
+
+    const stored = await env.DB.prepare("SELECT key FROM links WHERE kind = ?1")
+      .bind("subdomain")
+      .all<{ key: string }>();
+    expect(stored.results.map(({ key }) => key)).toStrictEqual([
+      "go",
+      "go/rsvp",
+    ]);
+
+    const response = await request("/rsvp/", {}, "go.foss.gg");
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("https://example.com/rsvp");
+  });
+
+  test("requires parent subdomain for per-path links", async () => {
+    const cookie = await loginCookie("admin", password);
+    const withoutParent = await form(
+      "/admin/links",
+      {
+        destination: "https://example.com/tickets",
+        key: "example/tickets",
+        kind: "subdomain",
+      },
+      cookie
+    );
+    expect(withoutParent.status).toBe(400);
+
+    const parentCreated = await form(
+      "/admin/links",
+      {
+        destination: "https://example.com/",
+        key: "example",
+        kind: "subdomain",
+      },
+      cookie
+    );
+    expect(parentCreated.status).toBe(303);
+
+    const withParent = await form(
+      "/admin/links",
+      {
+        destination: "https://example.com/tickets",
+        key: "example/tickets",
+        kind: "subdomain",
+      },
+      cookie
+    );
+    expect(withParent.status).toBe(303);
+
+    const rsvpResponse = await request("/tickets", {}, "example.foss.gg");
+    expect(rsvpResponse.headers.get("location")).toBe(
+      "https://example.com/tickets"
+    );
+  });
+
+  test("prevents converting last parent into a child", async () => {
+    const cookie = await loginCookie("admin", password);
+    await form(
+      "/admin/links",
+      {
+        destination: "https://example.com/",
+        key: "convert",
+        kind: "subdomain",
+      },
+      cookie
+    );
+    const id = await linkId("convert");
+    const converted = await form(
+      `/admin/links/${id}`,
+      {
+        destination: "https://example.com/tickets",
+        key: "convert/tickets",
+        kind: "subdomain",
+      },
+      cookie
+    );
+    expect(converted.status).toBe(400);
+  });
+
+  test("blocks deleting or renaming parent subdomains that have paths", async () => {
+    const cookie = await loginCookie("admin", password);
+    await form(
+      "/admin/links",
+      {
+        destination: "https://example.com/",
+        key: "keep",
+        kind: "subdomain",
+      },
+      cookie
+    );
+    await form(
+      "/admin/links",
+      {
+        destination: "https://example.com/shop",
+        key: "keep/shop",
+        kind: "subdomain",
+      },
+      cookie
+    );
+    const parentId = await linkId("keep");
+    const renaming = await form(
+      `/admin/links/${parentId}`,
+      {
+        destination: "https://example.com/",
+        key: "renamed",
+        kind: "subdomain",
+      },
+      cookie
+    );
+    expect(renaming.status).toBe(400);
+    const deleting = await form(`/admin/links/${parentId}/delete`, {}, cookie);
+    expect(deleting.status).toBe(400);
+
+    const childId = await linkId("keep/shop");
+    const childDeleted = await form(
+      `/admin/links/${childId}/delete`,
+      {},
+      cookie
+    );
+    expect(childDeleted.status).toBe(303);
+    const parentDeleted = await form(
+      `/admin/links/${parentId}/delete`,
+      {},
+      cookie
+    );
+    expect(parentDeleted.status).toBe(303);
+  });
+
+  test("requires owning the parent subdomain for per-path links", async () => {
+    const adminCookie = await loginCookie("admin", password);
+    await form(
+      "/admin/users",
+      { password: "correct horse battery staple", username: "alice" },
+      adminCookie
+    );
+    const userCookie = await loginCookie(
+      "alice",
+      "correct horse battery staple"
+    );
+
+    await form(
+      "/admin/links",
+      {
+        destination: "https://admin.example/",
+        key: "admin-sub",
+        kind: "subdomain",
+      },
+      adminCookie
+    );
+    const notOwner = await form(
+      "/admin/links",
+      {
+        destination: "https://alice.example/x",
+        key: "admin-sub/x",
+        kind: "subdomain",
+      },
+      userCookie
+    );
+    expect(notOwner.status).toBe(400);
+
+    await form(
+      "/admin/links",
+      {
+        destination: "https://alice.example/",
+        key: "alice-sub",
+        kind: "subdomain",
+      },
+      userCookie
+    );
+    const owner = await form(
+      "/admin/links",
+      {
+        destination: "https://alice.example/x",
+        key: "alice-sub/x",
+        kind: "subdomain",
+      },
+      userCookie
+    );
+    expect(owner.status).toBe(303);
+  });
+
   test("returns not found for unsupported host forms and missing links", async () => {
     const missing = await request("/missing");
     expect(missing.status).toBe(404);

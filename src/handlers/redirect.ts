@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 
 import type { AppBindings } from "../session";
+import { isSubdomainLabel, splitSubdomainKey } from "../subdomain-key";
 
 const APEX_HOST = "foss.gg";
 
@@ -13,45 +14,54 @@ interface Link {
 const normalizeHostname = (hostname: string): string =>
   hostname.toLowerCase().replace(/\.$/u, "");
 
-const isSubdomainKey = (value: string): boolean =>
-  value.length <= 63 && /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u.test(value);
-
 const getLookup = (
   hostname: string,
   pathname: string
-): { kind: LinkKind; key: string } | null => {
+): { kind: LinkKind; key: string; fallbackKey: string | null } | null => {
   if (hostname === APEX_HOST) {
-    return { key: pathname, kind: "path" };
+    return { fallbackKey: null, key: pathname, kind: "path" };
   }
   if (!hostname.endsWith(`.${APEX_HOST}`)) {
     return null;
   }
 
   const label = hostname.slice(0, -APEX_HOST.length - 1);
-  if (!label || label.includes(".") || !isSubdomainKey(label)) {
+  if (!label || label.includes(".") || !isSubdomainLabel(label)) {
     return null;
   }
-  return { key: label, kind: "subdomain" };
+  const trimmedPathname = pathname.replace(/\/+$/u, "");
+  const { path } = splitSubdomainKey(`${label}${trimmedPathname}`);
+  return path
+    ? { fallbackKey: label, key: `${label}${path}`, kind: "subdomain" }
+    : { fallbackKey: null, key: label, kind: "subdomain" };
 };
 
+const getRequestHostname = (request: Request): string =>
+  normalizeHostname(new URL(request.url).hostname);
+
 export const isApexRequest = (request: Request): boolean =>
-  normalizeHostname(new URL(request.url).hostname) === APEX_HOST;
+  getRequestHostname(request) === APEX_HOST;
 
 export const handleRedirect = async (
   context: Context<AppBindings>
 ): Promise<Response> => {
   const url = new URL(context.req.url);
-  const lookup = getLookup(normalizeHostname(url.hostname), url.pathname);
+  const lookup = getLookup(getRequestHostname(context.req.raw), url.pathname);
   if (!lookup) {
     return context.text("Not found", 404);
   }
 
-  try {
-    const link = await context.env.DB.prepare(
+  const findLink = (key: string): Promise<Link | null> =>
+    context.env.DB.prepare(
       "SELECT destination FROM links WHERE kind = ?1 AND key = ?2"
     )
-      .bind(lookup.kind, lookup.key)
+      .bind(lookup.kind, key)
       .first<Link>();
+
+  try {
+    const link =
+      (await findLink(lookup.key)) ??
+      (lookup.fallbackKey ? await findLink(lookup.fallbackKey) : null);
 
     return link
       ? new Response(null, {

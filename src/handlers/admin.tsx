@@ -9,6 +9,7 @@ import {
   loadSession,
 } from "../session";
 import type { AppBindings, Session } from "../session";
+import { isSubdomainLabel, splitSubdomainKey } from "../subdomain-key";
 import { AdminPage } from "../views/admin";
 import type { AuditEntry, Link, UserSummary } from "../views/admin";
 import { LoginPage } from "../views/login";
@@ -60,9 +61,6 @@ const isDestination = (value: string): boolean => {
   }
 };
 
-const isSubdomainKey = (value: string): boolean =>
-  value.length <= 63 && /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u.test(value);
-
 const isPathKey = (value: string): boolean =>
   value.length <= 2048 &&
   /^\/[\S]*$/u.test(value) &&
@@ -71,6 +69,18 @@ const isPathKey = (value: string): boolean =>
 
 const normalizePathKey = (value: string): string =>
   value.startsWith("/") ? value : `/${value}`;
+
+const normalizeSubdomainKey = (value: string): string => {
+  const { label, path } = splitSubdomainKey(value);
+  if (!isSubdomainLabel(label)) {
+    return "";
+  }
+  if (!path) {
+    return label;
+  }
+  const normalizedPath = normalizePathKey(path).replace(/\/+$/u, "");
+  return isPathKey(normalizedPath) ? `${label}${normalizedPath}` : "";
+};
 
 const readFormData = async (request: Request): Promise<FormData | null> => {
   try {
@@ -98,8 +108,9 @@ const readLinkInput = async (
   }
   // SAFETY: The checks above narrow rawKind to "path" or "subdomain", the only Link["kind"] values.
   const kind = rawKind as Link["kind"];
-  const key = kind === "path" ? normalizePathKey(rawKey) : rawKey.toLowerCase();
-  if (!key || (kind === "path" ? !isPathKey(key) : !isSubdomainKey(key))) {
+  const key =
+    kind === "path" ? normalizePathKey(rawKey) : normalizeSubdomainKey(rawKey);
+  if (!key || (kind === "path" && !isPathKey(key))) {
     return { error: "Enter a valid short-link key" };
   }
   if (
@@ -112,6 +123,37 @@ const readLinkInput = async (
     return { error: "Destination must be an absolute HTTP or HTTPS URL" };
   }
   return { destination, key, kind };
+};
+
+const ensureSubdomainParentExists = async (
+  db: D1Database,
+  key: string,
+  username: string,
+  excludeId?: number
+): Promise<string | null> => {
+  const { label: parent, path } = splitSubdomainKey(key);
+  if (!path) {
+    return null;
+  }
+  const row = excludeId
+    ? await db
+        .prepare(
+          "SELECT owner_username FROM links WHERE kind = ?1 AND key = ?2 AND id != ?3"
+        )
+        .bind("subdomain", parent, excludeId)
+        .first<{ owner_username: string }>()
+    : await db
+        .prepare(
+          "SELECT owner_username FROM links WHERE kind = ?1 AND key = ?2"
+        )
+        .bind("subdomain", parent)
+        .first<{ owner_username: string }>();
+  if (!row) {
+    return `Create ${parent}.foss.gg first`;
+  }
+  return row.owner_username === username
+    ? null
+    : `You don't own ${parent}.foss.gg`;
 };
 
 const listPage = async (
@@ -161,6 +203,16 @@ const createLink = async (
   if ("error" in input) {
     return listPage(context, session, input.error, 400);
   }
+  if (input.kind === "subdomain") {
+    const parentError = await ensureSubdomainParentExists(
+      context.env.DB,
+      input.key,
+      session.username
+    );
+    if (parentError) {
+      return listPage(context, session, parentError, 400);
+    }
+  }
 
   const now = new Date().toISOString();
   try {
@@ -181,6 +233,19 @@ const createLink = async (
   }
 };
 
+const countChildPaths = async (
+  db: D1Database,
+  parent: string
+): Promise<number> => {
+  const row = await db
+    .prepare(
+      "SELECT COUNT(*) AS total FROM links WHERE kind = ?1 AND key LIKE ?2"
+    )
+    .bind("subdomain", `${parent}/%`)
+    .first<{ total: number }>();
+  return row?.total ?? 0;
+};
+
 const updateLink = async (
   context: Context<AppBindings>,
   session: Session,
@@ -189,6 +254,40 @@ const updateLink = async (
   const input = await readLinkInput(context.req.raw);
   if ("error" in input) {
     return listPage(context, session, input.error, 400);
+  }
+  const existing = await context.env.DB.prepare(
+    "SELECT kind, key FROM links WHERE id = ?1 AND owner_username = ?2"
+  )
+    .bind(id, session.username)
+    .first<{ kind: Link["kind"]; key: string }>();
+  if (!existing) {
+    return textResponse("Not found", 404);
+  }
+  const renamedParent =
+    existing.kind === "subdomain" &&
+    !existing.key.includes("/") &&
+    (input.kind !== "subdomain" || input.key !== existing.key);
+  if (
+    renamedParent &&
+    (await countChildPaths(context.env.DB, existing.key)) > 0
+  ) {
+    return listPage(
+      context,
+      session,
+      `Delete ${existing.key} paths first`,
+      400
+    );
+  }
+  if (input.kind === "subdomain") {
+    const parentError = await ensureSubdomainParentExists(
+      context.env.DB,
+      input.key,
+      session.username,
+      id
+    );
+    if (parentError) {
+      return listPage(context, session, parentError, 400);
+    }
   }
 
   const now = new Date().toISOString();
@@ -221,16 +320,37 @@ const updateLink = async (
 };
 
 const deleteLink = async (
-  env: Env,
+  context: Context<AppBindings>,
   session: Session,
   id: number
 ): Promise<Response> => {
+  const existing = await context.env.DB.prepare(
+    "SELECT kind, key FROM links WHERE id = ?1 AND owner_username = ?2"
+  )
+    .bind(id, session.username)
+    .first<{ kind: Link["kind"]; key: string }>();
+  if (!existing) {
+    return textResponse("Not found", 404);
+  }
+  if (
+    existing.kind === "subdomain" &&
+    !existing.key.includes("/") &&
+    (await countChildPaths(context.env.DB, existing.key)) > 0
+  ) {
+    return listPage(
+      context,
+      session,
+      `Delete ${existing.key} paths first`,
+      400
+    );
+  }
+
   const now = new Date().toISOString();
-  const [, result] = await env.DB.batch([
-    env.DB.prepare(
+  const [, result] = await context.env.DB.batch([
+    context.env.DB.prepare(
       "INSERT INTO audit_log (actor_username, action, kind, key, destination, created_at) SELECT ?1, 'deleted', kind, key, destination, ?2 FROM links WHERE id = ?3 AND owner_username = ?1"
     ).bind(session.username, now, id),
-    env.DB.prepare(
+    context.env.DB.prepare(
       "DELETE FROM links WHERE id = ?1 AND owner_username = ?2"
     ).bind(id, session.username),
   ]);
@@ -348,7 +468,7 @@ adminRoutes.post("/links/:id{[0-9]+}", (context) => {
 adminRoutes.post("/links/:id{[0-9]+}/delete", (context) => {
   const session = context.get("session");
   return session
-    ? deleteLink(context.env, session, Number(context.req.param("id")))
+    ? deleteLink(context, session, Number(context.req.param("id")))
     : textResponse("Not found", 404);
 });
 
