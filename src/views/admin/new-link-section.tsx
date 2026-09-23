@@ -45,13 +45,13 @@ const AddressBuilder: FC<NewLinkFields & { parents: string[] }> = ({
           Create a subdomain…
         </option>
       </select>
+      <p class="hint">Only subdomains you own appear here.</p>
+      {ownershipMessage && (
+        <p class="hint" id="new-owner-help">
+          {ownershipMessage}
+        </p>
+      )}
     </div>
-    <p class="hint">Only subdomains you own appear here.</p>
-    {ownershipMessage && (
-      <p class="hint" id="new-owner-help">
-        {ownershipMessage}
-      </p>
-    )}
     <div class="builder-field" id="path-field">
       <label htmlFor="new-path">Path</label>
       <input
@@ -67,7 +67,6 @@ const AddressBuilder: FC<NewLinkFields & { parents: string[] }> = ({
     <div class="builder-field subdomain-fields" id="subdomain-fields" hidden>
       <label htmlFor="new-subdomain-name">Subdomain name</label>
       <div class="address-input">
-        <span aria-hidden="true">[</span>
         <input
           class="field mono"
           id="new-subdomain-name"
@@ -81,11 +80,11 @@ const AddressBuilder: FC<NewLinkFields & { parents: string[] }> = ({
               : "new-client-address-error"
           }
         />
-        <span aria-hidden="true">].foss.gg</span>
+        <span aria-hidden="true">.foss.gg</span>
       </div>
       <p class="error-text" id="new-client-address-error" hidden />
     </div>
-    <div class="builder-field">
+    <div class="builder-field builder-destination">
       <label htmlFor="new-destination" id="new-destination-label">
         {domainSelection === "create"
           ? "Default destination URL"

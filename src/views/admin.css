@@ -213,7 +213,9 @@ section {
 
 .address-builder {
   display: grid;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  align-items: start;
+  gap: 12px 16px;
 }
 .builder-field,
 .edit-field {
@@ -225,26 +227,31 @@ section {
   font-size: 14px;
   font-weight: 500;
 }
-.address-builder {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
-  align-items: start;
-}
-.address-builder > .builder-field:first-child,
-.address-builder > .preview,
-.address-builder > .builder-actions {
+.address-builder > :not(.builder-field),
+.address-builder > .builder-destination {
   grid-column: 1 / -1;
-}
-.address-builder > .hint {
-  align-self: end;
 }
 .address-input {
   display: flex;
   align-items: center;
-  gap: 4px;
+  min-width: 0;
   color: var(--muted);
 }
 .address-input .field {
   flex: 1;
+  border-radius: 6px 0 0 6px;
+}
+.address-input > span {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: 38px;
+  padding-inline: 10px;
+  border: 1px solid var(--field-line);
+  border-left: 0;
+  border-radius: 0 6px 6px 0;
+  background: var(--subtle);
+  white-space: nowrap;
 }
 .builder-actions {
   display: flex;
@@ -558,11 +565,6 @@ section {
   .address-builder,
   .edit-address-fields {
     grid-template-columns: minmax(0, 1fr);
-  }
-  .address-builder > .builder-field:first-child,
-  .address-builder > .preview,
-  .address-builder > .builder-actions {
-    grid-column: auto;
   }
   .row {
     align-items: flex-start;
