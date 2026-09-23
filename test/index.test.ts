@@ -378,6 +378,59 @@ describe("foss.gg worker", () => {
     expect(converted.status).toBe(400);
   });
 
+  test("requires owning the parent subdomain for per-path links", async () => {
+    const adminCookie = await loginCookie("admin", password);
+    await form(
+      "/admin/users",
+      { password: "correct horse battery staple", username: "alice" },
+      adminCookie
+    );
+    const userCookie = await loginCookie(
+      "alice",
+      "correct horse battery staple"
+    );
+
+    await form(
+      "/admin/links",
+      {
+        destination: "https://admin.example/",
+        key: "admin-sub",
+        kind: "subdomain",
+      },
+      adminCookie
+    );
+    const notOwner = await form(
+      "/admin/links",
+      {
+        destination: "https://alice.example/x",
+        key: "admin-sub/x",
+        kind: "subdomain",
+      },
+      userCookie
+    );
+    expect(notOwner.status).toBe(400);
+
+    await form(
+      "/admin/links",
+      {
+        destination: "https://alice.example/",
+        key: "alice-sub",
+        kind: "subdomain",
+      },
+      userCookie
+    );
+    const owner = await form(
+      "/admin/links",
+      {
+        destination: "https://alice.example/x",
+        key: "alice-sub/x",
+        kind: "subdomain",
+      },
+      userCookie
+    );
+    expect(owner.status).toBe(303);
+  });
+
   test("returns not found for unsupported host forms and missing links", async () => {
     const missing = await request("/missing");
     expect(missing.status).toBe(404);

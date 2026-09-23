@@ -138,6 +138,7 @@ const readLinkInput = async (
 const ensureSubdomainParentExists = async (
   db: D1Database,
   key: string,
+  username: string,
   excludeId?: number
 ): Promise<string | null> => {
   const slashIndex = key.indexOf("/");
@@ -148,15 +149,22 @@ const ensureSubdomainParentExists = async (
   const row = excludeId
     ? await db
         .prepare(
-          "SELECT 1 FROM links WHERE kind = ?1 AND key = ?2 AND id != ?3"
+          "SELECT owner_username FROM links WHERE kind = ?1 AND key = ?2 AND id != ?3"
         )
         .bind("subdomain", parent, excludeId)
-        .first()
+        .first<{ owner_username: string }>()
     : await db
-        .prepare("SELECT 1 FROM links WHERE kind = ?1 AND key = ?2")
+        .prepare(
+          "SELECT owner_username FROM links WHERE kind = ?1 AND key = ?2"
+        )
         .bind("subdomain", parent)
-        .first();
-  return row ? null : `Create ${parent}.foss.gg first`;
+        .first<{ owner_username: string }>();
+  if (!row) {
+    return `Create ${parent}.foss.gg first`;
+  }
+  return row.owner_username === username
+    ? null
+    : `You don't own ${parent}.foss.gg`;
 };
 
 const listPage = async (
@@ -209,7 +217,8 @@ const createLink = async (
   if (input.kind === "subdomain") {
     const parentError = await ensureSubdomainParentExists(
       context.env.DB,
-      input.key
+      input.key,
+      session.username
     );
     if (parentError) {
       return listPage(context, session, parentError, 400);
@@ -248,6 +257,7 @@ const updateLink = async (
     const parentError = await ensureSubdomainParentExists(
       context.env.DB,
       input.key,
+      session.username,
       id
     );
     if (parentError) {
