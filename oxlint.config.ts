@@ -5,6 +5,6 @@ import react from "ultracite/oxlint/react";
 import vitest from "ultracite/oxlint/vitest";
 
 export default defineConfig({
-  extends: [core, react, vitest, antiSlop],
+  extends: [antiSlop, core, react, vitest],
   ignorePatterns: core.ignorePatterns,
 });
