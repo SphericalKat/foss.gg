@@ -1,14 +1,14 @@
 import type { Context } from "hono";
 
+import { ownedParentLabels } from "../../domain/link";
 import type { Link } from "../../domain/link";
 import type { Session } from "../../domain/session";
-import { splitSubdomainKey } from "../../domain/subdomain-key";
 import { loadAdminPage } from "../../services/admin";
 import { authenticate } from "../../services/authentication";
 import { addLink, editLink, removeLink } from "../../services/links";
 import { addUser } from "../../services/users";
-import type { ErrorContext, LinkDraft } from "../../views/admin";
 import adminScript from "../../views/admin.client.js";
+import type { ErrorContext, LinkDraft } from "../../views/admin/types";
 import type { AppBindings } from "../bindings";
 import { clearSessionCookie, createSessionCookie } from "../middleware/session";
 import {
@@ -60,15 +60,8 @@ const ownedPrefillDomain = (
   if (!requested) {
     return undefined;
   }
-  return links.some(
-    (link) =>
-      link.kind === "subdomain" &&
-      link.owner_username === username &&
-      !splitSubdomainKey(link.key).path &&
-      splitSubdomainKey(link.key).label === requested.toLowerCase()
-  )
-    ? requested.toLowerCase()
-    : undefined;
+  const label = requested.toLowerCase();
+  return ownedParentLabels(links, username).includes(label) ? label : undefined;
 };
 
 const listPage = async (

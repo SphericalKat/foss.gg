@@ -4,7 +4,7 @@ import type { AuditEntry, Link } from "../../domain/link";
 import type { Session } from "../../domain/session";
 import type { UserSummary } from "../../domain/user";
 import { AdminPage } from "../../views/admin";
-import type { ErrorContext, LinkDraft, Notice } from "../../views/admin";
+import type { ErrorContext, LinkDraft, Notice } from "../../views/admin/types";
 import { shortUrl } from "../../views/format";
 import { LandingPage } from "../../views/landing";
 import { LoginPage } from "../../views/login";

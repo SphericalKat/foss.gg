@@ -90,3 +90,34 @@ export const validateLinkInput = (
   }
   return { destination, key, kind };
 };
+
+export const isSubdomainParent = (link: Link): boolean =>
+  link.kind === "subdomain" && !splitSubdomainKey(link.key).path;
+
+export const isSubdomainChildPath = (link: Link): boolean =>
+  link.kind === "subdomain" && Boolean(splitSubdomainKey(link.key).path);
+
+export const hasChildPaths = (link: Link, links: Link[]): boolean => {
+  if (!isSubdomainParent(link)) {
+    return false;
+  }
+  const { label } = splitSubdomainKey(link.key);
+  return links.some(
+    (candidate) =>
+      isSubdomainChildPath(candidate) &&
+      splitSubdomainKey(candidate.key).label === label
+  );
+};
+
+export const ownedParentLabels = (
+  links: Link[],
+  username: string
+): string[] => [
+  ...new Set(
+    links
+      .filter(
+        (link) => isSubdomainParent(link) && link.owner_username === username
+      )
+      .map((link) => splitSubdomainKey(link.key).label)
+  ),
+];
