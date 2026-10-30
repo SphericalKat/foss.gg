@@ -7,6 +7,7 @@ import {
   findDestination,
   findOwnedLink,
   findSubdomainOwner,
+  incrementRedirectCountAndFindDestination,
   insertLinkWithAudit,
   updateLinkWithAudit,
 } from "../repositories/links";
@@ -170,4 +171,17 @@ export const resolveLink = async (
 ): Promise<Pick<Link, "destination"> | null> => {
   const link = await findDestination(db, kind, key);
   return link ?? (fallbackKey ? findDestination(db, kind, fallbackKey) : null);
+};
+
+export const resolveAndRecordRedirect = async (
+  db: D1Database,
+  kind: LinkKind,
+  key: string,
+  fallbackKey: string | null
+): Promise<Pick<Link, "destination"> | null> => {
+  const link = await incrementRedirectCountAndFindDestination(db, kind, key);
+  if (link || !fallbackKey) {
+    return link;
+  }
+  return incrementRedirectCountAndFindDestination(db, kind, fallbackKey);
 };

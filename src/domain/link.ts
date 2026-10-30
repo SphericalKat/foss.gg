@@ -10,6 +10,7 @@ export interface Link {
   owner_username: string;
   created_at: string;
   updated_at: string;
+  redirect_count: number;
 }
 
 export interface LinkInput {

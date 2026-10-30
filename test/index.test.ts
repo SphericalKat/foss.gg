@@ -58,6 +58,18 @@ const linkId = async (key: string): Promise<number> => {
   return row.id;
 };
 
+const redirectCount = async (key: string): Promise<number> => {
+  const row = await env.DB.prepare(
+    "SELECT redirect_count FROM links WHERE key = ?1"
+  )
+    .bind(key)
+    .first<{ redirect_count: number }>();
+  if (!row) {
+    throw new Error(`Link ${key} was not created`);
+  }
+  return row.redirect_count;
+};
+
 describe("foss.gg worker", () => {
   beforeEach(async () => {
     await env.DB.exec("DELETE FROM audit_log");
@@ -109,6 +121,38 @@ describe("foss.gg worker", () => {
     expect(subdomainResponse.headers.get("location")).toBe(
       "https://example.org/"
     );
+  });
+
+  test("counts GET redirects but not HEAD requests", async () => {
+    const cookie = await loginCookie("admin", password);
+    await form(
+      "/admin/links",
+      { destination: "https://example.com", key: "count", kind: "path" },
+      cookie
+    );
+
+    const get = await request("/count");
+    const head = await request("/count", { method: "HEAD" });
+
+    expect(get.status).toBe(302);
+    expect(head.status).toBe(302);
+    await expect(redirectCount("/count")).resolves.toBe(1);
+  });
+
+  test("preserves every concurrent GET redirect", async () => {
+    const cookie = await loginCookie("admin", password);
+    await form(
+      "/admin/links",
+      { destination: "https://example.com", key: "popular", kind: "path" },
+      cookie
+    );
+
+    const responses = await Promise.all(
+      Array.from({ length: 10 }, () => request("/popular"))
+    );
+
+    expect(responses.every((response) => response.status === 302)).toBeTruthy();
+    await expect(redirectCount("/popular")).resolves.toBe(10);
   });
 
   test("requires a session for admin routes", async () => {
@@ -180,6 +224,48 @@ describe("foss.gg worker", () => {
     expect(editedResponse.headers.get("location")).toBe(
       "https://edited.example"
     );
+  });
+
+  test("resets redirects when a destination changes", async () => {
+    const cookie = await loginCookie("admin", password);
+    await form(
+      "/admin/links",
+      { destination: "https://example.com", key: "reset", kind: "path" },
+      cookie
+    );
+    await request("/reset");
+    const id = await linkId("/reset");
+
+    await form(
+      `/admin/links/${id}`,
+      {
+        destination: "https://changed.example",
+        key: "reset",
+        kind: "path",
+      },
+      cookie
+    );
+
+    await expect(redirectCount("/reset")).resolves.toBe(0);
+  });
+
+  test("preserves redirects when a short-link address changes", async () => {
+    const cookie = await loginCookie("admin", password);
+    await form(
+      "/admin/links",
+      { destination: "https://example.com", key: "old", kind: "path" },
+      cookie
+    );
+    await request("/old");
+    const id = await linkId("/old");
+
+    await form(
+      `/admin/links/${id}`,
+      { destination: "https://example.com", key: "new", kind: "path" },
+      cookie
+    );
+
+    await expect(redirectCount("/new")).resolves.toBe(1);
   });
 
   test("removes deleted links and records the audit trail", async () => {
@@ -283,6 +369,54 @@ describe("foss.gg worker", () => {
     expect(takeover.status).toBe(404);
   });
 
+  test("shows redirect counts only to the owner and admins", async () => {
+    const adminCookie = await loginCookie("admin", password);
+    await form(
+      "/admin/users",
+      { password: "correct horse battery staple", username: "alice" },
+      adminCookie
+    );
+    await form(
+      "/admin/links",
+      { destination: "https://example.com", key: "private", kind: "path" },
+      adminCookie
+    );
+    await request("/private");
+
+    const adminPage = await request("/admin", {
+      headers: { Cookie: adminCookie },
+    });
+    const aliceCookie = await loginCookie(
+      "alice",
+      "correct horse battery staple"
+    );
+    const alicePage = await request("/admin", {
+      headers: { Cookie: aliceCookie },
+    });
+
+    await expect(adminPage.text()).resolves.toContain("1 redirect");
+    await expect(alicePage.text()).resolves.not.toContain("1 redirect");
+  });
+
+  test("starts a recreated link at zero redirects", async () => {
+    const cookie = await loginCookie("admin", password);
+    await form(
+      "/admin/links",
+      { destination: "https://example.com", key: "again", kind: "path" },
+      cookie
+    );
+    await request("/again");
+    const id = await linkId("/again");
+    await form(`/admin/links/${id}/delete`, {}, cookie);
+    await form(
+      "/admin/links",
+      { destination: "https://example.com", key: "again", kind: "path" },
+      cookie
+    );
+
+    await expect(redirectCount("/again")).resolves.toBe(0);
+  });
+
   test("supports per-path subdomain links with fallback to apex subdomain", async () => {
     const cookie = await loginCookie("admin", password);
     await form(
@@ -311,6 +445,9 @@ describe("foss.gg worker", () => {
     expect(fallbackResponse.headers.get("location")).toBe(
       "https://example.org/"
     );
+    await expect(
+      Promise.all([redirectCount("go/rsvp"), redirectCount("go")])
+    ).resolves.toStrictEqual([1, 1]);
   });
 
   test("matches subdomain paths with a trailing slash", async () => {

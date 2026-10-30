@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 
-import { resolveLink } from "../../services/links";
+import { resolveAndRecordRedirect, resolveLink } from "../../services/links";
 import type { AppBindings } from "../bindings";
 import { getLookup, getRequestHostname } from "../requests/link-lookup";
 import { renderNotFound } from "../responses/html";
@@ -16,7 +16,9 @@ export const handleRedirect = async (
   }
 
   try {
-    const link = await resolveLink(
+    const resolve =
+      context.req.method === "GET" ? resolveAndRecordRedirect : resolveLink;
+    const link = await resolve(
       context.env.DB,
       lookup.kind,
       lookup.key,
