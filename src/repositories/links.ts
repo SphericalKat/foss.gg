@@ -4,7 +4,7 @@ import { isUniqueConstraintError } from "./errors";
 export const listLinks = async (db: D1Database): Promise<Link[]> => {
   const result = await db
     .prepare(
-      "SELECT id, kind, key, destination, owner_username, created_at, updated_at FROM links ORDER BY kind, key"
+      "SELECT id, kind, key, destination, owner_username, created_at, updated_at, redirect_count FROM links ORDER BY kind, key"
     )
     .all<Link>();
   return result.results;
@@ -117,7 +117,7 @@ export const updateLinkWithAudit = async (
     const [result] = await db.batch([
       db
         .prepare(
-          "UPDATE links SET kind = ?1, key = ?2, destination = ?3, updated_at = ?4 WHERE id = ?5 AND owner_username = ?6"
+          "UPDATE links SET kind = ?1, key = ?2, destination = ?3, redirect_count = CASE WHEN destination != ?3 THEN 0 ELSE redirect_count END, updated_at = ?4 WHERE id = ?5 AND owner_username = ?6"
         )
         .bind(input.kind, input.key, input.destination, now, id, username),
       db
