@@ -32,6 +32,18 @@ export const findDestination = (
     .bind(kind, key)
     .first<Pick<Link, "destination">>();
 
+export const incrementRedirectCountAndFindDestination = (
+  db: D1Database,
+  kind: LinkKind,
+  key: string
+): Promise<Pick<Link, "destination"> | null> =>
+  db
+    .prepare(
+      "UPDATE links SET redirect_count = redirect_count + 1 WHERE kind = ?1 AND key = ?2 RETURNING destination"
+    )
+    .bind(kind, key)
+    .first<Pick<Link, "destination">>();
+
 export const findOwnedLink = (
   db: D1Database,
   id: number,
