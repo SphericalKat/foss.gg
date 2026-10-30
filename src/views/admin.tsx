@@ -54,6 +54,7 @@ export const AdminPage: FC<AdminPageProps> = ({
       <LinksSection
         links={links}
         username={session.username}
+        isAdmin={session.isAdmin}
         error={error}
         errorContext={errorContext}
         draft={draft}

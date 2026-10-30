@@ -420,6 +420,10 @@ section {
   color: var(--muted);
   font-size: 13px;
 }
+.redirect-count {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .delete-consequence {
   max-width: 260px;
 }

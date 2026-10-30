@@ -51,10 +51,11 @@ const groupSummary = (group: LinkGroup): string => {
 export const LinksSection: FC<{
   links: Link[];
   username: string;
+  isAdmin: boolean;
   error?: string;
   errorContext?: ErrorContext;
   draft?: LinkDraft;
-}> = ({ links, username, error, errorContext, draft }) => (
+}> = ({ links, username, isAdmin, error, errorContext, draft }) => (
   <section aria-labelledby="links-heading">
     <div class="section-head">
       <h2 id="links-heading">
@@ -104,6 +105,7 @@ export const LinksSection: FC<{
                   link={link}
                   links={links}
                   username={username}
+                  isAdmin={isAdmin}
                   error={error}
                   errorContext={errorContext}
                   draft={draft}
@@ -123,6 +125,7 @@ export const LinksSection: FC<{
                     link={link}
                     links={links}
                     username={username}
+                    isAdmin={isAdmin}
                     error={error}
                     errorContext={errorContext}
                     draft={draft}

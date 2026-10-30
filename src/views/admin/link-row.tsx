@@ -21,6 +21,9 @@ const deleteConfirmation = (link: Link): string => {
   return `Delete this path? ${deleteFallbackMessage(link)}`;
 };
 
+const redirectCountLabel = (count: number): string =>
+  `${count} ${count === 1 ? "redirect" : "redirects"}`;
+
 const LinkRowActions: FC<{
   link: Link;
   editable: boolean;
@@ -73,11 +76,13 @@ export const LinkRow: FC<{
   link: Link;
   links: Link[];
   username: string;
+  isAdmin: boolean;
   error?: string;
   errorContext?: ErrorContext;
   draft?: LinkDraft;
-}> = ({ link, username, links, error, errorContext, draft }) => {
+}> = ({ link, username, isAdmin, links, error, errorContext, draft }) => {
   const editable = link.owner_username === username;
+  const canViewRedirectCount = editable || isAdmin;
   const children = hasChildPaths(link, links);
   const failedEdit =
     errorContext?.operation === "edit" && errorContext.linkId === link.id;
@@ -118,6 +123,11 @@ export const LinkRow: FC<{
           </div>
         </div>
         <div class="row-side">
+          {canViewRedirectCount && (
+            <span class="redirect-count">
+              {redirectCountLabel(link.redirect_count)}
+            </span>
+          )}
           <LinkRowActions
             link={link}
             editable={editable}
